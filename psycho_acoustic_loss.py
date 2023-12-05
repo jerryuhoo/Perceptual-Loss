@@ -25,8 +25,8 @@ def psycho_acoustic_loss(
         mT_true = compute_masking_threshold(ys_true, fs, N, nfilts)
         if use_weighting:
             mT_true = mT_true.unsqueeze(1)
-            W = mapping2barkmat(fs, nfilts, 2 * N)
-            W_inv = mappingfrombarkmat(W, 2 * N)
+            W = mapping2barkmat(fs, nfilts, 2 * N).to(ys_pred.device)
+            W_inv = mappingfrombarkmat(W, 2 * N).to(ys_pred.device)
             mT_true = mappingfrombark(mT_true, W_inv, 2 * N).transpose(-1, -2)
             normdiffspec = abs((ys_pred - ys_true) / mT_true)
             normdiffspec_squared = normdiffspec**2
