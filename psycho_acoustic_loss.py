@@ -18,11 +18,15 @@ def psycho_acoustic_loss(ys_pred, ys_true, fs=44100, N=1024, nfilts=64):
         )
 
     # Function to compute MSE loss for a single channel
-    def compute_channel_loss(y_pred_channel, y_true_channel):
-        mT_pred = compute_masking_threshold(y_pred_channel, fs, N, nfilts)
-        mT_true = compute_masking_threshold(y_true_channel, fs, N, nfilts)
-
-        return F.mse_loss(mT_pred, mT_true)
+    def compute_channel_loss(ys_pred, ys_true, use_weighting=True):
+        mT_pred = compute_masking_threshold(ys_pred, fs, N, nfilts)
+        mT_true = compute_masking_threshold(ys_true, fs, N, nfilts)
+        if use_weighting:
+            normdiffspec = abs((ys_pred - ys_true) / mT_true)
+            loss = np.mean(normdiffspec**2)
+        else:
+            loss = F.mse_loss(mT_pred, mT_true)
+        return loss
 
     if channels == 1:
         # Mono audio
@@ -91,7 +95,9 @@ def f_SP_dB(maxfreq, nfilts):
     maxbark = hz2bark(maxfreq)
     spreadingfunctionBarkdB = torch.zeros(2 * nfilts)
     spreadingfunctionBarkdB[0:nfilts] = torch.linspace(-maxbark * 27, -8, nfilts) - 23.5
-    spreadingfunctionBarkdB[nfilts : 2 * nfilts] = torch.linspace(0, -maxbark * 12.0, nfilts) - 23.5
+    spreadingfunctionBarkdB[nfilts : 2 * nfilts] = (
+        torch.linspace(0, -maxbark * 12.0, nfilts) - 23.5
+    )
     return spreadingfunctionBarkdB
 
 
@@ -99,7 +105,9 @@ def spreadingfunctionmat(spreadingfunctionBarkdB, alpha, nfilts):
     spreadingfunctionBarkVoltage = 10.0 ** (spreadingfunctionBarkdB / 20.0 * alpha)
     spreadingfuncmatrix = torch.zeros(nfilts, nfilts)
     for k in range(nfilts):
-        spreadingfuncmatrix[k, :] = spreadingfunctionBarkVoltage[(nfilts - k) : (2 * nfilts - k)]
+        spreadingfuncmatrix[k, :] = spreadingfunctionBarkVoltage[
+            (nfilts - k) : (2 * nfilts - k)
+        ]
     return spreadingfuncmatrix
 
 
@@ -184,7 +192,9 @@ def mapping2bark(mX, W, nfft):
 
 def mappingfrombarkmat(W, nfft):
     nfreqs = int(nfft / 2)
-    W_inv = torch.mm(torch.diag(1.0 / (torch.sum(W, dim=1) + 1e-6)).sqrt(), W[:, 0 : nfreqs + 1]).T
+    W_inv = torch.mm(
+        torch.diag(1.0 / (torch.sum(W, dim=1) + 1e-6)).sqrt(), W[:, 0 : nfreqs + 1]
+    ).T
     return W_inv
 
 
@@ -236,7 +246,9 @@ def plot_results(ys, fs, N, nfilts=64):
     plt.subplot(3, 1, 2)
     # print("ys", ys_dB[:, middle_frame_idx].numpy())
     # print("mt", mT_dB[:, middle_frame_idx].numpy())
-    plt.plot(f, ys_dB[:, middle_frame_idx].numpy(), color="blue", label="Spectrum", alpha=0.7)
+    plt.plot(
+        f, ys_dB[:, middle_frame_idx].numpy(), color="blue", label="Spectrum", alpha=0.7
+    )
     plt.plot(
         f,
         mT_dB[:, middle_frame_idx].numpy(),
