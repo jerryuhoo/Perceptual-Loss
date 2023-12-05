@@ -4,7 +4,9 @@ import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
 
-def psycho_acoustic_loss(ys_pred, ys_true, fs=44100, N=1024, nfilts=64):
+def psycho_acoustic_loss(
+    ys_pred, ys_true, fs=44100, N=1024, nfilts=64, use_weighting=True
+):
     """
     ys_pred: [batch_size, channels, N+1, frame]
     ys_true: [batch_size, channels, N+1, frame]
@@ -18,7 +20,7 @@ def psycho_acoustic_loss(ys_pred, ys_true, fs=44100, N=1024, nfilts=64):
         )
 
     # Function to compute MSE loss for a single channel
-    def compute_channel_loss(ys_pred, ys_true, use_weighting=True):
+    def compute_channel_loss(ys_pred, ys_true, use_weighting):
         mT_pred = compute_masking_threshold(ys_pred, fs, N, nfilts)
         mT_true = compute_masking_threshold(ys_true, fs, N, nfilts)
         if use_weighting:
@@ -30,11 +32,11 @@ def psycho_acoustic_loss(ys_pred, ys_true, fs=44100, N=1024, nfilts=64):
 
     if channels == 1:
         # Mono audio
-        mse_loss = compute_channel_loss(ys_pred, ys_true)
+        mse_loss = compute_channel_loss(ys_pred, ys_true, use_weighting=use_weighting)
     else:
         # Stereo audio
-        mse_left = compute_channel_loss(ys_pred[:, 0, :, :], ys_true[:, 0, :, :])
-        mse_right = compute_channel_loss(ys_pred[:, 1, :, :], ys_true[:, 1, :, :])
+        mse_left = compute_channel_loss(ys_pred[:, 0, :, :], ys_true[:, 0, :, :], use_weighting=use_weighting)
+        mse_right = compute_channel_loss(ys_pred[:, 1, :, :], ys_true[:, 1, :, :], use_weighting=use_weighting)
         mse_loss = (mse_left + mse_right) / 2  # Average loss across channels
 
     return mse_loss
