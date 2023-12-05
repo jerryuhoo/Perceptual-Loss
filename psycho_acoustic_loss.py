@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 def psycho_acoustic_loss(
-    ys_pred, ys_true, fs=44100, N=1024, nfilts=64, use_weighting=True
+    ys_pred, ys_true, fs=44100, N=1024, nfilts=64, use_weighting=True, use_LTQ=False
 ):
     """
     ys_pred: [batch_size, channels, N+1, frame]
@@ -20,9 +20,9 @@ def psycho_acoustic_loss(
         )
 
     # Function to compute MSE loss for a single channel
-    def compute_channel_loss(ys_pred, ys_true, use_weighting):
-        mT_pred = compute_masking_threshold(ys_pred, fs, N, nfilts)
-        mT_true = compute_masking_threshold(ys_true, fs, N, nfilts)
+    def compute_channel_loss(ys_pred, ys_true, use_weighting, use_LTQ):
+        mT_pred = compute_masking_threshold(ys_pred, fs, N, nfilts, use_LTQ=use_LTQ)
+        mT_true = compute_masking_threshold(ys_true, fs, N, nfilts, use_LTQ=use_LTQ)
         if use_weighting:
             mT_true = mT_true.unsqueeze(1)
             W = mapping2barkmat(fs, nfilts, 2 * N).to(ys_pred.device)
@@ -37,14 +37,22 @@ def psycho_acoustic_loss(
 
     if channels == 1:
         # Mono audio
-        mse_loss = compute_channel_loss(ys_pred, ys_true, use_weighting=use_weighting)
+        mse_loss = compute_channel_loss(
+            ys_pred, ys_true, use_weighting=use_weighting, use_LTQ=use_LTQ
+        )
     else:
         # Stereo audio
         mse_left = compute_channel_loss(
-            ys_pred[:, 0, :, :], ys_true[:, 0, :, :], use_weighting=use_weighting
+            ys_pred[:, 0, :, :],
+            ys_true[:, 0, :, :],
+            use_weighting=use_weighting,
+            use_LTQ=use_LTQ,
         )
         mse_right = compute_channel_loss(
-            ys_pred[:, 1, :, :], ys_true[:, 1, :, :], use_weighting=use_weighting
+            ys_pred[:, 1, :, :],
+            ys_true[:, 1, :, :],
+            use_weighting=use_weighting,
+            use_LTQ=use_LTQ,
         )
         mse_loss = (mse_left + mse_right) / 2  # Average loss across channels
 
@@ -63,7 +71,7 @@ def get_analysis_params(fs, N, nfilts=64):
     return W, spreadingfuncmatrix, alpha
 
 
-def compute_masking_threshold(ys, fs, N, nfilts=64):
+def compute_masking_threshold(ys, fs, N, nfilts=64, use_LTQ=False):
     W, spreadingfuncmatrix, alpha = get_analysis_params(fs, N, nfilts)
     W = W.to(ys.device)
     ys = ys.squeeze(1)
@@ -73,7 +81,9 @@ def compute_masking_threshold(ys, fs, N, nfilts=64):
     mXbark = mapping2bark(torch.abs(ys), W, 2 * N)
 
     # Compute mTbark for all frames at once
-    mTbark = maskingThresholdBark(mXbark, spreadingfuncmatrix, alpha, fs, nfilts)
+    mTbark = maskingThresholdBark(
+        mXbark, spreadingfuncmatrix, alpha, fs, nfilts, use_LTQ=use_LTQ
+    )
 
     return mTbark
 
