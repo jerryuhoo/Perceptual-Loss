@@ -24,8 +24,13 @@ def psycho_acoustic_loss(
         mT_pred = compute_masking_threshold(ys_pred, fs, N, nfilts)
         mT_true = compute_masking_threshold(ys_true, fs, N, nfilts)
         if use_weighting:
+            mT_true = mT_true.unsqueeze(1)
+            W = mapping2barkmat(fs, nfilts, 2 * N)
+            W_inv = mappingfrombarkmat(W, 2 * N)
+            mT_true = mappingfrombark(mT_true, W_inv, 2 * N).transpose(-1, -2)
             normdiffspec = abs((ys_pred - ys_true) / mT_true)
-            loss = np.mean(normdiffspec**2)
+            normdiffspec_squared = normdiffspec**2
+            loss = torch.mean(normdiffspec_squared)
         else:
             loss = F.mse_loss(mT_pred, mT_true)
         return loss
@@ -35,8 +40,12 @@ def psycho_acoustic_loss(
         mse_loss = compute_channel_loss(ys_pred, ys_true, use_weighting=use_weighting)
     else:
         # Stereo audio
-        mse_left = compute_channel_loss(ys_pred[:, 0, :, :], ys_true[:, 0, :, :], use_weighting=use_weighting)
-        mse_right = compute_channel_loss(ys_pred[:, 1, :, :], ys_true[:, 1, :, :], use_weighting=use_weighting)
+        mse_left = compute_channel_loss(
+            ys_pred[:, 0, :, :], ys_true[:, 0, :, :], use_weighting=use_weighting
+        )
+        mse_right = compute_channel_loss(
+            ys_pred[:, 1, :, :], ys_true[:, 1, :, :], use_weighting=use_weighting
+        )
         mse_loss = (mse_left + mse_right) / 2  # Average loss across channels
 
     return mse_loss
