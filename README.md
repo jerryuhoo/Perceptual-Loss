@@ -1,6 +1,6 @@
 # Perceptual-Loss (WIP)
 
-WIP project for designing a psycho-acoustic loss.
+WIP project for designing the psycho-acoustic loss.
 
 Here's an example of using psycho-acoustic loss in PyTorch.
 
