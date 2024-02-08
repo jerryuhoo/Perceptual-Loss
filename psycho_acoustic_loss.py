@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torchaudio
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 
@@ -90,12 +91,36 @@ def compute_masking_threshold(ys, fs, N, nfilts=64, use_LTQ=False):
 
 def compute_STFT(x, N, return_amplitude=True):
     ys = torch.stft(x, n_fft=2 * N, return_complex=True)
-
     if return_amplitude:
         ys = torch.abs(ys)
 
     ys = ys * torch.sqrt(torch.tensor(2 * N / 2)) / 2 / 0.375
     return ys
+
+
+def reconstruct_waveform(
+    audio_original, fft_recon, n_fft=2048, hop_length=512, win_length=2048
+):
+    audio_original = audio_original.squeeze()
+    stft = torch.stft(
+        audio_original,
+        n_fft=n_fft,
+        hop_length=hop_length,
+        win_length=win_length,
+        return_complex=True,
+    )
+    phase = torch.angle(stft)
+
+    complex_fft = torch.polar(fft_recon, phase)
+
+    waveform_recon = torch.istft(
+        complex_fft, n_fft=n_fft, win_length=win_length, hop_length=hop_length
+    )
+
+    waveform_recon = waveform_recon.squeeze()
+    waveform_recon /= torch.max(torch.abs(waveform_recon))
+
+    return waveform_recon
 
 
 def gaussian_spreading_function(nfilts, sigma):
@@ -231,6 +256,97 @@ def mappingfrombark(mTbark, W_inv, nfft):
     return mT  # Keeping shape [batch size, N, N]
 
 
+def calculate_bits_from_smr(smr):
+    return max(1, int(smr / 6))
+
+
+def get_energy_from_stft(ys):
+    return torch.abs(ys) ** 2
+
+
+def quantize(signal, num_bits):
+    levels = 2**num_bits - 1
+    scale = levels
+    quantized = torch.round(signal * scale) / scale
+    return quantized
+
+
+def recon_stft_from_bark_and_quantize(ys, fs=44100, nfilts=64):
+    N = ys.shape[1] - 1
+    nfft = 2 * N
+
+    W, spreadingfuncmatrix, alpha = get_analysis_params(fs, N, nfilts)
+    W = W.to(ys.device)
+    mXbark = mapping2bark(torch.abs(ys), W, 2 * N)
+    mTbark = maskingThresholdBark(
+        mXbark, spreadingfuncmatrix, alpha, fs, nfilts, use_LTQ=True
+    )
+
+    W_inv = mappingfrombarkmat(W, nfft)
+    mT = mappingfrombark(mTbark, W_inv, nfft).transpose(-1, -2)
+    print("mT", mT.shape)
+    print("mT.max", mT.max())
+    print("ys", ys.shape)
+    # 31712 max value
+    max_ys = torch.full_like(ys, 31712)
+
+    signal_energy = get_energy_from_stft(ys)
+    print("signal_energy", signal_energy.shape)
+
+    max_energy = get_energy_from_stft(max_ys)
+    print("max_energy", max_energy.shape)
+    max_energy_db = 10 * torch.log10(max_energy)
+    smr_db = 10 * torch.log10(signal_energy / mT)
+    signal_energy_db = 10 * torch.log10(signal_energy)
+    noise_db = signal_energy_db - smr_db
+    smax_to_mask_ratio_db = max_energy_db - noise_db
+    quantization_bits = smax_to_mask_ratio_db // 6
+    print("quantization_bits", quantization_bits)
+    print("smax_to_mask_ratio_db", smax_to_mask_ratio_db)
+    print("noise_db", noise_db)
+    print("smr_db", smr_db)
+
+    quantized_stft = torch.zeros_like(ys)
+
+    # print("quantized_stft", quantized_stft.shape)
+    # print("quantization_bits", quantization_bits.shape)
+    for i in range(ys.shape[1]):  # bin
+        for j in range(ys.shape[2]):  # frame
+            quantized_stft[0, i, j] = quantize(ys[0, i, j], quantization_bits[0, i, j])
+    print("quantized_stft", quantized_stft)
+    print("ys", ys)
+
+    plt.figure(figsize=(20, 8))
+
+    plt.subplot(1, 2, 1)
+    plt.title("ys Spectrum")
+    plt.imshow(
+        20 * np.log10(np.abs(ys.squeeze().cpu().numpy() + 1e-8)),
+        aspect="auto",
+        origin="lower",
+        extent=[0, fs / 2, 0, ys.shape[0]],
+    )
+    plt.colorbar(label="Magnitude (dB)")
+    plt.xlabel("Frequency (Hz)")
+    plt.ylabel("Frame")
+
+    plt.subplot(1, 2, 2)
+    plt.title("quantized_stft quantized Spectrum")
+    plt.imshow(
+        20 * np.log10(np.abs(quantized_stft.squeeze().cpu().numpy() + 1e-8)),
+        aspect="auto",
+        origin="lower",
+        extent=[0, fs / 2, 0, quantized_stft.shape[0]],
+    )
+    plt.colorbar(label="Magnitude (dB)")
+    plt.xlabel("Frequency (Hz)")
+    plt.ylabel("Frame")
+
+    plt.show()
+
+    return quantized_stft
+
+
 def plot_results(ys, fs, N, nfilts=64):
     mT = compute_masking_threshold(ys, fs, N, nfilts)
 
@@ -316,3 +432,82 @@ def plot_results(ys, fs, N, nfilts=64):
 
     plt.tight_layout()
     plt.savefig("spectrogram_with_masking_threshold.png")
+
+
+def main():
+    # Load audio
+    fs = 44100
+    N = 1024
+    nfilts = 64
+    waveform, sample_rate = torchaudio.load("audio_mp3_align.wav")
+    audio_mp3_align = waveform[0]
+
+    waveform, sample_rate = torchaudio.load("audio_original.wav")
+    audio_original = waveform[0]
+
+    waveform, sample_rate = torchaudio.load("audio_quantized.wav")
+    audio_quantized = waveform[0]
+
+    # Compute STFT
+    ys_mp3_align = compute_STFT(audio_mp3_align, N=1024).unsqueeze(0).unsqueeze(0)
+    ys_original = compute_STFT(audio_original, N=1024).unsqueeze(0).unsqueeze(0)
+    ys_quantized = compute_STFT(audio_quantized, N=1024).unsqueeze(0).unsqueeze(0)
+
+    ys_mp3_align = ys_mp3_align[:, :, :, : ys_original.shape[-1]]
+
+    # single file example with weighting
+    mp3_ploss = psycho_acoustic_loss(ys_mp3_align, ys_original, fs=sample_rate)
+    print("loss: mp3, original", mp3_ploss.item())
+
+    quant_ploss = psycho_acoustic_loss(ys_quantized, ys_original, fs=sample_rate)
+    print("loss: quantized, original", quant_ploss.item())
+
+    # Plot results
+    # plot_results(ys, fs, N, nfilts)
+
+    # fft_recon = recon_fft_from_bark(ys_original.squeeze(0), fs=fs)
+
+    # n_samples = audio_original.shape[0]
+    # t = torch.linspace(0, n_samples / fs, n_samples)
+    # freq = 440
+    # sine_wave = torch.sin(2 * torch.pi * freq * t)
+    # sine_wave = (
+    #     2 * (sine_wave - sine_wave.min()) / (sine_wave.max() - sine_wave.min()) - 1
+    # )
+    # ys_original = compute_STFT(sine_wave, N=1024).unsqueeze(0).unsqueeze(0)
+    # print("ys_original", ys_original.min())
+    # print("sinewave", sine_wave.min())
+
+    stft_recon_quant = recon_stft_from_bark_and_quantize(
+        ys_original.squeeze(0), fs=fs, nfilts=nfilts
+    )
+    # waveform_recon = reconstruct_waveform(audio_original, fft_recon)
+
+    waveform_recon_quant = reconstruct_waveform(audio_original, stft_recon_quant)
+    # print("waveform_recon", waveform_recon.shape)
+    print("waveform_original", audio_original.shape)
+    print("waveform_recon_quant", waveform_recon_quant.shape)
+
+    plt.figure(figsize=(12, 8))
+    plt.subplot(2, 1, 1)
+    plt.plot(audio_original.numpy())
+    plt.title("Original Audio")
+    plt.xlabel("Sample")
+    plt.ylabel("Amplitude")
+
+    plt.subplot(2, 1, 2)
+    plt.plot(waveform_recon_quant.numpy())
+    plt.title("Reconstructed Audio")
+    plt.xlabel("Sample")
+    plt.ylabel("Amplitude")
+
+    plt.tight_layout()
+    plt.show()
+
+    torchaudio.save(
+        "audio_mp3_align_recon.wav", waveform_recon_quant.unsqueeze(0), sample_rate
+    )
+
+
+if __name__ == "__main__":
+    main()
