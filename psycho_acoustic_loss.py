@@ -89,12 +89,21 @@ def compute_masking_threshold(ys, fs, N, nfilts=64, use_LTQ=False):
     return mTbark
 
 
+def amplitude_to_db(x, ref=1.0, amin=1e-10, top_db=80.0):
+    x = x.abs()
+    x = torch.clamp(x, min=amin)
+    x_db = 20.0 * torch.log10(x / ref)
+    x_db = torch.clamp(x_db, min=-top_db)
+    return x_db
+
+
 def compute_STFT(x, N, return_amplitude=True):
     ys = torch.stft(x, n_fft=2 * N, return_complex=True)
+    ys = ys / N * 2
+
     if return_amplitude:
         ys = torch.abs(ys)
 
-    ys = ys * torch.sqrt(torch.tensor(2 * N / 2)) / 2 / 0.375
     return ys
 
 
@@ -266,8 +275,7 @@ def get_energy_from_stft(ys):
 
 def quantize(signal, num_bits):
     levels = 2**num_bits - 1
-    scale = levels
-    quantized = torch.round(signal * scale) / scale
+    quantized = torch.round(signal * levels) / levels
     return quantized
 
 
@@ -278,8 +286,6 @@ def recon_stft_from_bark_and_quantize(ys, fs=44100, nfilts=64):
     W, spreadingfuncmatrix, alpha = get_analysis_params(fs, N, nfilts)
     W = W.to(ys.device)
     mXbark = mapping2bark(torch.abs(ys), W, 2 * N)
-
-    print("mXbark", mXbark.shape)
 
     example = mXbark[0]
     plt.figure(figsize=(10, 6))
@@ -296,55 +302,56 @@ def recon_stft_from_bark_and_quantize(ys, fs=44100, nfilts=64):
     plt.show()
 
     mTbark = maskingThresholdBark(
-        mXbark, spreadingfuncmatrix, alpha, fs, nfilts, use_LTQ=True
+        mXbark, spreadingfuncmatrix, alpha, fs, nfilts, use_LTQ=False
     )
-
-    print("mTbark", mTbark.shape)
 
     W_inv = mappingfrombarkmat(W, nfft)
     mT = mappingfrombark(mTbark, W_inv, nfft).transpose(-1, -2)
-
-    print("mT", mT.shape)
-    print("mT.max", mT.max())
+    mT_dB = amplitude_to_db(mT)
+    ys_dB = amplitude_to_db(ys)
+    smr_dB = ys_dB - mT_dB
+    max_ys = torch.full_like(ys, 1)
+    max_dB = amplitude_to_db(max_ys)
+    noise_dB = ys_dB - smr_dB
+    smax_to_mask_ratio_dB = max_dB - noise_dB
+    assert torch.allclose(noise_dB, mT_dB, atol=1e-5)
 
     # get the 100th frame
     frame_index = 100
-    ys_frame = ys[0, :, frame_index]
-    mT_frame = mT[0, :, frame_index]
+    ys_frame = ys_dB[0, :, frame_index]
+    mT_frame = mT_dB[0, :, frame_index]
+    smr_frame = smr_dB[0, :, frame_index]
+    smax_to_mask_ratio_frame = smax_to_mask_ratio_dB[0, :, frame_index]
 
     # plot the spectrum and masking threshold for the 100th frame
     plt.figure(figsize=(10, 6))
     freqs = np.linspace(0, 1024, 1025)  # 1025 frequency bins
     plt.plot(freqs, ys_frame, label="Spectrum")
     plt.plot(freqs, mT_frame, label="Masking Threshold", linestyle="--")
+    plt.plot(freqs, smr_frame, label="SMR", linestyle="dotted")
+    plt.plot(
+        freqs, smax_to_mask_ratio_frame, label="Smax to Mask Ratio", linestyle="--"
+    )
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("Amplitude")
     plt.title("Spectrum and Masking Threshold at Frame 100")
     plt.legend()
     plt.show()
 
+    print("mT.max", mT.max())
     print("ys", ys.shape)
-    # 31712 max value
-    max_ys = torch.full_like(ys, 31712)
+    # 1.4517 max value
 
-    signal_energy = get_energy_from_stft(ys)
-    print("signal_energy", signal_energy.shape)
+    print("ys", ys.max())
+    # signal_energy_dB = get_energy_from_stft(ys)
+    # max_energy = get_energy_from_stft(max_ys)
+    # print("max_energy_db", max_energy)
+    print("mT", mT.shape)
 
-    max_energy = get_energy_from_stft(max_ys)
-    print("max_energy", max_energy.shape)
-    max_energy_db = 10 * torch.log10(max_energy)
-    smr_db = 10 * torch.log10(signal_energy / mT)
-    signal_energy_db = 10 * torch.log10(signal_energy)
-    noise_db = signal_energy_db - smr_db
-    smax_to_mask_ratio_db = max_energy_db - noise_db
-    quantization_bits = smax_to_mask_ratio_db // 6
+    quantization_bits = smax_to_mask_ratio_dB // 6
     print("quantization_bits", quantization_bits)
-    print("smax_to_mask_ratio_db", smax_to_mask_ratio_db)
-    print("noise_db", noise_db)
-    print("smr_db", smr_db)
 
     quantized_stft = torch.zeros_like(ys)
-
     # print("quantized_stft", quantized_stft.shape)
     # print("quantization_bits", quantization_bits.shape)
     for i in range(ys.shape[1]):  # bin
@@ -512,8 +519,9 @@ def main():
     #     2 * (sine_wave - sine_wave.min()) / (sine_wave.max() - sine_wave.min()) - 1
     # )
     # ys_original = compute_STFT(sine_wave, N=1024).unsqueeze(0).unsqueeze(0)
-    # print("ys_original", ys_original.min())
+    # print("ys_original", ys_original.max())  # 1.4517
     # print("sinewave", sine_wave.min())
+    # raise ValueError("stop")
 
     stft_recon_quant = recon_stft_from_bark_and_quantize(
         ys_original.squeeze(0), fs=fs, nfilts=nfilts
