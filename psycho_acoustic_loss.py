@@ -278,14 +278,51 @@ def recon_stft_from_bark_and_quantize(ys, fs=44100, nfilts=64):
     W, spreadingfuncmatrix, alpha = get_analysis_params(fs, N, nfilts)
     W = W.to(ys.device)
     mXbark = mapping2bark(torch.abs(ys), W, 2 * N)
+
+    print("mXbark", mXbark.shape)
+
+    example = mXbark[0]
+    plt.figure(figsize=(10, 6))
+    plt.imshow(
+        example.T,
+        aspect="auto",
+        origin="lower",
+        extent=[0, example.shape[0], 0, example.shape[1]],
+    )
+    plt.colorbar(label="Amplitude")
+    plt.xlabel("Time Frames")
+    plt.ylabel("Bark Scale")
+    plt.title("Spectrogram in Bark Scale")
+    plt.show()
+
     mTbark = maskingThresholdBark(
         mXbark, spreadingfuncmatrix, alpha, fs, nfilts, use_LTQ=True
     )
 
+    print("mTbark", mTbark.shape)
+
     W_inv = mappingfrombarkmat(W, nfft)
     mT = mappingfrombark(mTbark, W_inv, nfft).transpose(-1, -2)
+
     print("mT", mT.shape)
     print("mT.max", mT.max())
+
+    # get the 100th frame
+    frame_index = 100
+    ys_frame = ys[0, :, frame_index]
+    mT_frame = mT[0, :, frame_index]
+
+    # plot the spectrum and masking threshold for the 100th frame
+    plt.figure(figsize=(10, 6))
+    freqs = np.linspace(0, 1024, 1025)  # 1025 frequency bins
+    plt.plot(freqs, ys_frame, label="Spectrum")
+    plt.plot(freqs, mT_frame, label="Masking Threshold", linestyle="--")
+    plt.xlabel("Frequency (Hz)")
+    plt.ylabel("Amplitude")
+    plt.title("Spectrum and Masking Threshold at Frame 100")
+    plt.legend()
+    plt.show()
+
     print("ys", ys.shape)
     # 31712 max value
     max_ys = torch.full_like(ys, 31712)
