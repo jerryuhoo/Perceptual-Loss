@@ -279,7 +279,7 @@ def quantize(signal, num_bits):
     return quantized
 
 
-def recon_stft_from_bark_and_quantize(ys, fs=44100, nfilts=64):
+def recon_stft_from_bark_and_quantize(ys, fs=44100, nfilts=64, mT_dB_shift=0):
     N = ys.shape[1] - 1
     nfft = 2 * N
 
@@ -308,6 +308,7 @@ def recon_stft_from_bark_and_quantize(ys, fs=44100, nfilts=64):
     W_inv = mappingfrombarkmat(W, nfft)
     mT = mappingfrombark(mTbark, W_inv, nfft).transpose(-1, -2)
     mT_dB = amplitude_to_db(mT)
+    mT_dB += mT_dB_shift
     ys_dB = amplitude_to_db(ys)
     smr_dB = ys_dB - mT_dB
     max_ys = torch.full_like(ys, 1)
@@ -334,7 +335,9 @@ def recon_stft_from_bark_and_quantize(ys, fs=44100, nfilts=64):
     )
     plt.xlabel("Frequency (Hz)")
     plt.ylabel("Amplitude")
-    plt.title("Spectrum and Masking Threshold at Frame 100")
+    plt.title(
+        f"Spectrum and Masking Threshold at Frame={frame_index}, mT_dB_shift={mT_dB_shift} dB"
+    )
     plt.legend()
     plt.show()
 
@@ -375,7 +378,7 @@ def recon_stft_from_bark_and_quantize(ys, fs=44100, nfilts=64):
     plt.ylabel("Frame")
 
     plt.subplot(1, 2, 2)
-    plt.title("quantized_stft quantized Spectrum")
+    plt.title(f"quantized_stft quantized Spectrum at mT_dB_shift={mT_dB_shift} dB")
     plt.imshow(
         20 * np.log10(np.abs(quantized_stft.squeeze().cpu().numpy() + 1e-8)),
         aspect="auto",
@@ -483,6 +486,7 @@ def main():
     fs = 44100
     N = 1024
     nfilts = 64
+    mT_dB_shift = 0
     waveform, sample_rate = torchaudio.load("audio_mp3_align.wav")
     audio_mp3_align = waveform[0]
 
@@ -524,7 +528,7 @@ def main():
     # raise ValueError("stop")
 
     stft_recon_quant = recon_stft_from_bark_and_quantize(
-        ys_original.squeeze(0), fs=fs, nfilts=nfilts
+        ys_original.squeeze(0), fs=fs, nfilts=nfilts, mT_dB_shift=mT_dB_shift
     )
     # waveform_recon = reconstruct_waveform(audio_original, fft_recon)
 
@@ -542,7 +546,7 @@ def main():
 
     plt.subplot(2, 1, 2)
     plt.plot(waveform_recon_quant.numpy())
-    plt.title("Reconstructed Audio")
+    plt.title(f"Reconstructed Audio at mT_dB_shift={mT_dB_shift} dB")
     plt.xlabel("Sample")
     plt.ylabel("Amplitude")
 
@@ -550,7 +554,9 @@ def main():
     plt.show()
 
     torchaudio.save(
-        "audio_mp3_align_recon.wav", waveform_recon_quant.unsqueeze(0), sample_rate
+        "audio_mp3_align_recon_" + str(mT_dB_shift) + ".wav",
+        waveform_recon_quant.unsqueeze(0),
+        sample_rate,
     )
 
 
