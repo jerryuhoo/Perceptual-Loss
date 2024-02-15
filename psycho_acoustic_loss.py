@@ -592,7 +592,7 @@ def test(folder_path):
                 ys_original.squeeze(0), fs=fs, nfilts=nfilts, mT_dB_shift=mT_dB_shift
             )
 
-            stft_differece = ys_original - stft_recon_quant
+            stft_differece = ys_original.squeeze(0) - stft_recon_quant
 
             plt.figure(figsize=(20, 8))
 
@@ -602,11 +602,11 @@ def test(folder_path):
                 20 * np.log10(np.abs(ys_original.squeeze().cpu().numpy() + 1e-8)),
                 aspect="auto",
                 origin="lower",
-                extent=[0, fs / 2, 0, ys_original.shape[0]],
+                extent=[0, ys_original.shape[3], 0, fs / 2],
             )
-            plt.colorbar(label="Magnitude (dB)")
-            plt.xlabel("Frequency (Hz)")
-            plt.ylabel("Frame")
+            plt.colorbar()
+            plt.xlabel("Frame")
+            plt.ylabel("Frequency (Hz)")
 
             plt.subplot(1, 3, 2)
             plt.title(
@@ -616,11 +616,11 @@ def test(folder_path):
                 20 * np.log10(np.abs(stft_recon_quant.squeeze().cpu().numpy() + 1e-8)),
                 aspect="auto",
                 origin="lower",
-                extent=[0, fs / 2, 0, stft_recon_quant.shape[0]],
+                extent=[0, ys_original.shape[3], 0, fs / 2],
             )
-            plt.colorbar(label="Magnitude (dB)")
-            plt.xlabel("Frequency (Hz)")
-            plt.ylabel("Frame")
+            plt.colorbar()
+            plt.xlabel("Frame")
+            plt.ylabel("Frequency (Hz)")
 
             plt.subplot(1, 3, 3)
             plt.title(f"stft_differece at mT_dB_shift={mT_dB_shift} dB")
@@ -628,9 +628,11 @@ def test(folder_path):
                 20 * np.log10(np.abs(stft_differece.squeeze().cpu().numpy() + 1e-8)),
                 aspect="auto",
                 origin="lower",
-                extent=[0, fs / 2, 0, stft_differece.shape[0]],
+                extent=[0, ys_original.shape[3], 0, fs / 2],
             )
             plt.colorbar(label="Magnitude (dB)")
+            plt.xlabel("Frame")
+            plt.ylabel("Frequency (Hz)")
             plt.savefig(os.path.join(output_folder, file.split(".")[0] + "_stft.png"))
 
             waveform_recon_quant = reconstruct_waveform(
