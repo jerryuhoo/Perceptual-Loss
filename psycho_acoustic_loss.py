@@ -3,6 +3,7 @@ import torch
 import torchaudio
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+import os
 
 
 def psycho_acoustic_loss(
@@ -108,7 +109,12 @@ def compute_STFT(x, N, return_amplitude=True):
 
 
 def reconstruct_waveform(
-    audio_original, fft_recon, n_fft=2048, hop_length=512, win_length=2048
+    audio_original,
+    fft_recon,
+    n_fft=2048,
+    hop_length=512,
+    win_length=2048,
+    normalize=False,
 ):
     audio_original = audio_original.squeeze()
     stft = torch.stft(
@@ -118,6 +124,10 @@ def reconstruct_waveform(
         win_length=win_length,
         return_complex=True,
     )
+
+    N = n_fft // 2
+    fft_recon = fft_recon / 2 * N
+
     phase = torch.angle(stft)
 
     complex_fft = torch.polar(fft_recon, phase)
@@ -127,7 +137,8 @@ def reconstruct_waveform(
     )
 
     waveform_recon = waveform_recon.squeeze()
-    waveform_recon /= torch.max(torch.abs(waveform_recon))
+    if normalize:
+        waveform_recon /= torch.max(torch.abs(waveform_recon))
 
     return waveform_recon
 
@@ -299,7 +310,7 @@ def recon_stft_from_bark_and_quantize(ys, fs=44100, nfilts=64, mT_dB_shift=0):
     plt.xlabel("Time Frames")
     plt.ylabel("Bark Scale")
     plt.title("Spectrogram in Bark Scale")
-    plt.show()
+    # plt.show()
 
     mTbark = maskingThresholdBark(
         mXbark, spreadingfuncmatrix, alpha, fs, nfilts, use_LTQ=False
@@ -339,57 +350,48 @@ def recon_stft_from_bark_and_quantize(ys, fs=44100, nfilts=64, mT_dB_shift=0):
         f"Spectrum and Masking Threshold at Frame={frame_index}, mT_dB_shift={mT_dB_shift} dB"
     )
     plt.legend()
-    plt.show()
-
-    print("mT.max", mT.max())
-    print("ys", ys.shape)
-    # 1.4517 max value
-
-    print("ys", ys.max())
-    # signal_energy_dB = get_energy_from_stft(ys)
-    # max_energy = get_energy_from_stft(max_ys)
-    # print("max_energy_db", max_energy)
-    print("mT", mT.shape)
+    # plt.show()
 
     quantization_bits = smax_to_mask_ratio_dB // 6
-    print("quantization_bits", quantization_bits)
+    # print("quantization_bits", quantization_bits)
 
     quantized_stft = torch.zeros_like(ys)
     # print("quantized_stft", quantized_stft.shape)
     # print("quantization_bits", quantization_bits.shape)
     for i in range(ys.shape[1]):  # bin
         for j in range(ys.shape[2]):  # frame
+            # print("ys            [0, i, j]", ys[0, i, j])
             quantized_stft[0, i, j] = quantize(ys[0, i, j], quantization_bits[0, i, j])
-    print("quantized_stft", quantized_stft)
-    print("ys", ys)
+            # print("quantized_stft[0, i, j]", quantized_stft[0, i, j])
 
-    plt.figure(figsize=(20, 8))
+    # raise ValueError("stop")
+    # plt.figure(figsize=(20, 8))
 
-    plt.subplot(1, 2, 1)
-    plt.title("ys Spectrum")
-    plt.imshow(
-        20 * np.log10(np.abs(ys.squeeze().cpu().numpy() + 1e-8)),
-        aspect="auto",
-        origin="lower",
-        extent=[0, fs / 2, 0, ys.shape[0]],
-    )
-    plt.colorbar(label="Magnitude (dB)")
-    plt.xlabel("Frequency (Hz)")
-    plt.ylabel("Frame")
+    # plt.subplot(1, 2, 1)
+    # plt.title("ys Spectrum")
+    # plt.imshow(
+    #     20 * np.log10(np.abs(ys.squeeze().cpu().numpy() + 1e-8)),
+    #     aspect="auto",
+    #     origin="lower",
+    #     extent=[0, fs / 2, 0, ys.shape[0]],
+    # )
+    # plt.colorbar(label="Magnitude (dB)")
+    # plt.xlabel("Frequency (Hz)")
+    # plt.ylabel("Frame")
 
-    plt.subplot(1, 2, 2)
-    plt.title(f"quantized_stft quantized Spectrum at mT_dB_shift={mT_dB_shift} dB")
-    plt.imshow(
-        20 * np.log10(np.abs(quantized_stft.squeeze().cpu().numpy() + 1e-8)),
-        aspect="auto",
-        origin="lower",
-        extent=[0, fs / 2, 0, quantized_stft.shape[0]],
-    )
-    plt.colorbar(label="Magnitude (dB)")
-    plt.xlabel("Frequency (Hz)")
-    plt.ylabel("Frame")
+    # plt.subplot(1, 2, 2)
+    # plt.title(f"quantized_stft quantized Spectrum at mT_dB_shift={mT_dB_shift} dB")
+    # plt.imshow(
+    #     20 * np.log10(np.abs(quantized_stft.squeeze().cpu().numpy() + 1e-8)),
+    #     aspect="auto",
+    #     origin="lower",
+    #     extent=[0, fs / 2, 0, quantized_stft.shape[0]],
+    # )
+    # plt.colorbar(label="Magnitude (dB)")
+    # plt.xlabel("Frequency (Hz)")
+    # plt.ylabel("Frame")
 
-    plt.show()
+    # plt.show()
 
     return quantized_stft
 
@@ -560,5 +562,122 @@ def main():
     )
 
 
+def test(folder_path):
+    # Load audio
+    fs = 44100
+    N = 1024
+    nfilts = 64
+    mT_dB_shift = 0
+
+    output_folder = "reconstructed_audio"
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+
+    for file in os.listdir(folder_path):
+        if file.endswith(".flac") or file.endswith(".wav") or file.endswith(".mp3"):
+            filename = file.split(".")[0]
+            print(filename)
+            waveform, sample_rate = torchaudio.load(os.path.join(folder_path, file))
+            audio_original = waveform[0][: fs * 5]  # only take the first 5 seconds
+            torchaudio.save(
+                os.path.join(output_folder, file.split(".")[0] + "_original.wav"),
+                audio_original.unsqueeze(0),
+                sample_rate,
+            )
+
+            # Compute STFT
+            ys_original = compute_STFT(audio_original, N=1024).unsqueeze(0).unsqueeze(0)
+
+            stft_recon_quant = recon_stft_from_bark_and_quantize(
+                ys_original.squeeze(0), fs=fs, nfilts=nfilts, mT_dB_shift=mT_dB_shift
+            )
+
+            stft_differece = ys_original - stft_recon_quant
+
+            plt.figure(figsize=(20, 8))
+
+            plt.subplot(1, 3, 1)
+            plt.title("ys Spectrum")
+            plt.imshow(
+                20 * np.log10(np.abs(ys_original.squeeze().cpu().numpy() + 1e-8)),
+                aspect="auto",
+                origin="lower",
+                extent=[0, fs / 2, 0, ys_original.shape[0]],
+            )
+            plt.colorbar(label="Magnitude (dB)")
+            plt.xlabel("Frequency (Hz)")
+            plt.ylabel("Frame")
+
+            plt.subplot(1, 3, 2)
+            plt.title(
+                f"quantized_stft quantized Spectrum at mT_dB_shift={mT_dB_shift} dB"
+            )
+            plt.imshow(
+                20 * np.log10(np.abs(stft_recon_quant.squeeze().cpu().numpy() + 1e-8)),
+                aspect="auto",
+                origin="lower",
+                extent=[0, fs / 2, 0, stft_recon_quant.shape[0]],
+            )
+            plt.colorbar(label="Magnitude (dB)")
+            plt.xlabel("Frequency (Hz)")
+            plt.ylabel("Frame")
+
+            plt.subplot(1, 3, 3)
+            plt.title(f"stft_differece at mT_dB_shift={mT_dB_shift} dB")
+            plt.imshow(
+                20 * np.log10(np.abs(stft_differece.squeeze().cpu().numpy() + 1e-8)),
+                aspect="auto",
+                origin="lower",
+                extent=[0, fs / 2, 0, stft_differece.shape[0]],
+            )
+            plt.colorbar(label="Magnitude (dB)")
+            plt.savefig(os.path.join(output_folder, file.split(".")[0] + "_stft.png"))
+
+            waveform_recon_quant = reconstruct_waveform(
+                audio_original, stft_recon_quant
+            )
+
+            if audio_original.shape[0] != waveform_recon_quant.shape[0]:
+                # pad
+                waveform_recon_quant = F.pad(
+                    waveform_recon_quant,
+                    (0, audio_original.shape[0] - waveform_recon_quant.shape[0]),
+                )
+            audio_difference = audio_original.numpy() - waveform_recon_quant.numpy()
+
+            plt.figure(figsize=(12, 8))
+            plt.subplot(3, 1, 1)
+            plt.plot(audio_original.numpy())
+            plt.title("Original Audio")
+            plt.xlabel("Sample")
+            plt.ylabel("Amplitude")
+
+            plt.subplot(3, 1, 2)
+            plt.plot(waveform_recon_quant.numpy())
+            plt.title(f"Reconstructed Audio at mT_dB_shift={mT_dB_shift} dB")
+            plt.xlabel("Sample")
+            plt.ylabel("Amplitude")
+
+            plt.subplot(3, 1, 3)
+            plt.plot(audio_difference)
+            plt.title("Difference Audio")
+            plt.xlabel("Sample")
+            plt.ylabel("Amplitude Difference")
+
+            plt.tight_layout()
+            plt.savefig(os.path.join(output_folder, file.split(".")[0] + "_recon.png"))
+
+            torchaudio.save(
+                os.path.join(
+                    output_folder,
+                    file.split(".")[0] + "_recon_" + str(mT_dB_shift) + ".wav",
+                ),
+                waveform_recon_quant.unsqueeze(0),
+                sample_rate,
+            )
+            plt.close("all")
+
+
 if __name__ == "__main__":
-    main()
+    # main()
+    test("/Users/yyf/Downloads/SQAM_FLAC")
