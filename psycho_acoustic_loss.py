@@ -99,7 +99,9 @@ def amplitude_to_db(x, ref=1.0, amin=1e-10, top_db=80.0):
 
 
 def compute_STFT(x, N, return_amplitude=True):
-    ys = torch.stft(x, n_fft=2 * N, return_complex=True)
+    ys = torch.stft(
+        x, n_fft=2 * N, return_complex=True, window=torch.hann_window(2 * N)
+    )
     ys = ys / N * 2
 
     if return_amplitude:
@@ -123,6 +125,7 @@ def reconstruct_waveform(
         hop_length=hop_length,
         win_length=win_length,
         return_complex=True,
+        window=torch.hann_window(n_fft),
     )
 
     N = n_fft // 2
@@ -133,7 +136,11 @@ def reconstruct_waveform(
     complex_fft = torch.polar(fft_recon, phase)
 
     waveform_recon = torch.istft(
-        complex_fft, n_fft=n_fft, win_length=win_length, hop_length=hop_length
+        complex_fft,
+        n_fft=n_fft,
+        win_length=win_length,
+        hop_length=hop_length,
+        window=torch.hann_window(n_fft),
     )
 
     waveform_recon = waveform_recon.squeeze()
@@ -353,7 +360,26 @@ def recon_stft_from_bark_and_quantize(ys, fs=44100, nfilts=64, mT_dB_shift=0):
     # plt.show()
 
     quantization_bits = smax_to_mask_ratio_dB // 6
-    # print("quantization_bits", quantization_bits)
+    # quantization_bits = torch.fill_(quantization_bits, 5)
+
+    # plot quantization bits
+    plt.figure(figsize=(10, 6))
+    plt.imshow(
+        quantization_bits.squeeze().cpu().numpy(),
+        aspect="auto",
+        origin="lower",
+        extent=[
+            0,
+            quantization_bits.squeeze().shape[1],
+            0,
+            quantization_bits.squeeze().shape[0],
+        ],
+    )
+    plt.colorbar(label="Quantization Bits")
+    plt.xlabel("Time Frames")
+    plt.ylabel("Frequency Bins")
+    plt.title("Quantization Bits")
+    # plt.show()
 
     quantized_stft = torch.zeros_like(ys)
     # print("quantized_stft", quantized_stft.shape)
@@ -553,7 +579,7 @@ def main():
     plt.ylabel("Amplitude")
 
     plt.tight_layout()
-    plt.show()
+    # plt.show()
 
     torchaudio.save(
         "audio_mp3_align_recon_" + str(mT_dB_shift) + ".wav",
@@ -597,7 +623,7 @@ def test(folder_path):
             plt.figure(figsize=(20, 8))
 
             plt.subplot(1, 3, 1)
-            plt.title("ys Spectrum")
+            plt.title("ys Spectrogram")
             plt.imshow(
                 20 * np.log10(np.abs(ys_original.squeeze().cpu().numpy() + 1e-8)),
                 aspect="auto",
@@ -634,6 +660,42 @@ def test(folder_path):
             plt.xlabel("Frame")
             plt.ylabel("Frequency (Hz)")
             plt.savefig(os.path.join(output_folder, file.split(".")[0] + "_stft.png"))
+
+            # plot spectrum
+            middle_frame = ys_original.shape[3] // 2
+            frequencies = np.linspace(0, fs / 2, ys_original.shape[2])
+
+            plt.figure(figsize=(20, 8))
+
+            plt.subplot(1, 3, 1)
+            plt.title("ys Spectrum")
+            spectrum_ys = 20 * np.log10(
+                np.abs(ys_original.squeeze().cpu().numpy()[:, middle_frame] + 1e-8)
+            )
+            plt.plot(frequencies, spectrum_ys)
+            plt.xlabel("Frequency (Hz)")
+            plt.ylabel("Magnitude (dB)")
+
+            plt.subplot(1, 3, 2)
+            plt.title(f"Quantized STFT Spectrum at mT_dB_shift={mT_dB_shift} dB")
+            spectrum_quant = 20 * np.log10(
+                np.abs(stft_recon_quant.squeeze().cpu().numpy()[:, middle_frame] + 1e-8)
+            )
+            plt.plot(frequencies, spectrum_quant)
+            plt.xlabel("Frequency (Hz)")
+            plt.ylabel("Magnitude (dB)")
+
+            spectrum_diff = spectrum_ys - spectrum_quant
+
+            plt.subplot(1, 3, 3)
+            plt.title(f"Spectrum Difference at mT_dB_shift={mT_dB_shift} dB")
+            plt.plot(frequencies, spectrum_diff)
+            plt.xlabel("Frequency (Hz)")
+            plt.ylabel("Magnitude (dB)")
+
+            plt.savefig(
+                os.path.join(output_folder, file.split(".")[0] + "_spectrum.png")
+            )
 
             waveform_recon_quant = reconstruct_waveform(
                 audio_original, stft_recon_quant
