@@ -7,7 +7,14 @@ import os
 
 
 def psycho_acoustic_loss(
-    ys_pred, ys_true, fs=44100, N=1024, nfilts=64, use_weighting=True, use_LTQ=False
+    ys_pred,
+    ys_true,
+    fs=44100,
+    N=1024,
+    nfilts=64,
+    use_weighting=True,
+    use_LTQ=False,
+    mt_shift=0,
 ):
     """
     ys_pred: [batch_size, channels, N+1, frame]
@@ -22,25 +29,29 @@ def psycho_acoustic_loss(
         )
 
     # Function to compute MSE loss for a single channel
-    def compute_channel_loss(ys_pred, ys_true, use_weighting, use_LTQ):
-        mT_pred = compute_masking_threshold(ys_pred, fs, N, nfilts, use_LTQ=use_LTQ)
+    def compute_channel_loss(ys_pred, ys_true, use_weighting, use_LTQ, mt_shift):
         mT_true = compute_masking_threshold(ys_true, fs, N, nfilts, use_LTQ=use_LTQ)
         if use_weighting:
             mT_true = mT_true.unsqueeze(1)
             W = mapping2barkmat(fs, nfilts, 2 * N).to(ys_pred.device)
             W_inv = mappingfrombarkmat(W, 2 * N).to(ys_pred.device)
             mT_true = mappingfrombark(mT_true, W_inv, 2 * N).transpose(-1, -2)
-            normdiffspec = abs((ys_pred - ys_true) / mT_true)
+            normdiffspec = abs((ys_pred - ys_true) / (mT_true + mt_shift))
             normdiffspec_squared = normdiffspec**2
             loss = torch.mean(normdiffspec_squared)
         else:
+            mT_pred = compute_masking_threshold(ys_pred, fs, N, nfilts, use_LTQ=use_LTQ)
             loss = F.mse_loss(mT_pred, mT_true)
         return loss
 
     if channels == 1:
         # Mono audio
         mse_loss = compute_channel_loss(
-            ys_pred, ys_true, use_weighting=use_weighting, use_LTQ=use_LTQ
+            ys_pred,
+            ys_true,
+            use_weighting=use_weighting,
+            use_LTQ=use_LTQ,
+            mt_shift=mt_shift,
         )
     else:
         # Stereo audio
@@ -49,12 +60,14 @@ def psycho_acoustic_loss(
             ys_true[:, 0, :, :],
             use_weighting=use_weighting,
             use_LTQ=use_LTQ,
+            mt_shift=mt_shift,
         )
         mse_right = compute_channel_loss(
             ys_pred[:, 1, :, :],
             ys_true[:, 1, :, :],
             use_weighting=use_weighting,
             use_LTQ=use_LTQ,
+            mt_shift=mt_shift,
         )
         mse_loss = (mse_left + mse_right) / 2  # Average loss across channels
 
@@ -98,11 +111,20 @@ def amplitude_to_db(x, ref=1.0, amin=1e-10, top_db=80.0):
     return x_db
 
 
-def compute_STFT(x, N, return_amplitude=True):
+def compute_STFT(
+    x, N, return_amplitude=True, hop_length=512, win_length=2048, normalize=True
+):
     ys = torch.stft(
-        x, n_fft=2 * N, return_complex=True, window=torch.hann_window(2 * N)
+        x,
+        n_fft=2 * N,
+        hop_length=hop_length,
+        win_length=win_length,
+        return_complex=True,
+        window=torch.hann_window(2 * N),
     )
-    ys = ys / N * 2
+
+    if normalize:
+        ys = ys / N * 2
 
     if return_amplitude:
         ys = torch.abs(ys)
@@ -532,11 +554,112 @@ def main():
     ys_mp3_align = ys_mp3_align[:, :, :, : ys_original.shape[-1]]
 
     # single file example with weighting
-    mp3_ploss = psycho_acoustic_loss(ys_mp3_align, ys_original, fs=sample_rate)
-    print("loss: mp3, original", mp3_ploss.item())
+    mp3_ploss = psycho_acoustic_loss(
+        ys_mp3_align,
+        ys_original,
+        fs=sample_rate,
+        N=1024,
+        nfilts=64,
+        use_weighting=True,
+        use_LTQ=False,
+    )
+    print("weighted loss: mp3, original", mp3_ploss.item())
 
-    quant_ploss = psycho_acoustic_loss(ys_quantized, ys_original, fs=sample_rate)
-    print("loss: quantized, original", quant_ploss.item())
+    quant_ploss = psycho_acoustic_loss(
+        ys_quantized,
+        ys_original,
+        fs=sample_rate,
+        N=1024,
+        nfilts=64,
+        use_weighting=True,
+        use_LTQ=False,
+    )
+    print("weighted loss: quantized, original", quant_ploss.item())
+    print(
+        "weighted loss: mp3/quant ratio, small is better",
+        mp3_ploss.item() / quant_ploss.item(),
+    )
+
+    # single file example without weighting
+    mp3_ploss = psycho_acoustic_loss(
+        ys_mp3_align,
+        ys_original,
+        fs=sample_rate,
+        N=1024,
+        nfilts=64,
+        use_weighting=False,
+        use_LTQ=False,
+    )
+    print("mt diff loss: mp3, original", mp3_ploss.item())
+
+    quant_ploss = psycho_acoustic_loss(
+        ys_quantized,
+        ys_original,
+        fs=sample_rate,
+        N=1024,
+        nfilts=64,
+        use_weighting=False,
+        use_LTQ=False,
+    )
+    print("mt diff loss: quantized, original", quant_ploss.item())
+    print(
+        "mt diff loss: mp3/quant ratio, small is better",
+        mp3_ploss.item() / quant_ploss.item(),
+    )
+
+    # single file example with weighting and LTQ
+    mp3_ploss = psycho_acoustic_loss(
+        ys_mp3_align,
+        ys_original,
+        fs=sample_rate,
+        N=1024,
+        nfilts=64,
+        use_weighting=True,
+        use_LTQ=True,
+    )
+    print("weighted loss + LTQ: mp3, original", mp3_ploss.item())
+
+    quant_ploss = psycho_acoustic_loss(
+        ys_quantized,
+        ys_original,
+        fs=sample_rate,
+        N=1024,
+        nfilts=64,
+        use_weighting=True,
+        use_LTQ=True,
+    )
+    print("weighted loss + LTQ: quantized, original", quant_ploss.item())
+    print(
+        "weighted loss + LTQ: mp3/quant ratio, small is better",
+        mp3_ploss.item() / quant_ploss.item(),
+    )
+
+    # single file example without weighting and with LTQ
+    mp3_ploss = psycho_acoustic_loss(
+        ys_mp3_align,
+        ys_original,
+        fs=sample_rate,
+        N=1024,
+        nfilts=64,
+        use_weighting=False,
+        use_LTQ=True,
+    )
+    print("mt diff loss + LTQ: mp3, original", mp3_ploss.item())
+
+    quant_ploss = psycho_acoustic_loss(
+        ys_quantized,
+        ys_original,
+        fs=sample_rate,
+        N=1024,
+        nfilts=64,
+        use_weighting=False,
+        use_LTQ=True,
+    )
+    print("mt diff loss + LTQ: quantized, original", quant_ploss.item())
+    print(
+        "mt diff loss + LTQ: mp3/quant ratio, small is better",
+        mp3_ploss.item() / quant_ploss.item(),
+    )
 
     # Plot results
     # plot_results(ys, fs, N, nfilts)
@@ -743,5 +866,5 @@ def test(folder_path):
 
 
 if __name__ == "__main__":
-    # main()
-    test("/Users/yyf/Downloads/SQAM_FLAC")
+    main()
+    # test("/Users/yyf/Downloads/SQAM_FLAC")
