@@ -277,7 +277,7 @@ def mapping2bark(mX, W, nfft):
     mXbark_pre_sqrt = torch.matmul(mX_transposed, W[:, :nfreqs].T)
 
     # Clamping to ensure non-negative values before sqrt
-    mXbark_pre_sqrt = torch.clamp(mXbark_pre_sqrt, min=0.0000001)
+    mXbark_pre_sqrt = torch.clamp(mXbark_pre_sqrt, min=0.0)
 
     # Now, take the square root
     mXbark = mXbark_pre_sqrt**0.5
