@@ -553,6 +553,16 @@ def main():
 
     ys_mp3_align = ys_mp3_align[:, :, :, : ys_original.shape[-1]]
 
+    mse_loss_mp3 = F.mse_loss(ys_mp3_align, ys_original)
+    print("mse_loss_mp3", mse_loss_mp3.item())
+    mse_loss_quant = F.mse_loss(ys_quantized, ys_original)
+    print("mse_loss_quant", mse_loss_quant.item())
+    print(ys_mp3_align.shape)
+    print(
+        "mse_loss_mp3/quant ratio, small is better",
+        mse_loss_mp3.item() / mse_loss_quant.item(),
+    )
+
     # single file example with weighting
     mp3_ploss = psycho_acoustic_loss(
         ys_mp3_align,
