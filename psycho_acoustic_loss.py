@@ -14,8 +14,9 @@ def psycho_acoustic_loss(
     nfilts=64,
     use_weighting=True,
     use_LTQ=False,
-    mt_shift=0,
+    mT_shift=0,
     ref_dB=60,
+    mT_shift_is_db=True,
 ):
     """
     ys_pred: [batch_size, channels, N+1, frame]
@@ -31,7 +32,7 @@ def psycho_acoustic_loss(
 
     # Function to compute MSE loss for a single channel
     def compute_channel_loss(
-        ys_pred, ys_true, use_weighting, use_LTQ, mt_shift, ref_dB=60
+        ys_pred, ys_true, use_weighting, use_LTQ, mT_shift, ref_dB=60
     ):
         mT_true = compute_masking_threshold(
             ys_true, fs, N, nfilts, use_LTQ=use_LTQ, ref_dB=ref_dB
@@ -41,7 +42,11 @@ def psycho_acoustic_loss(
             W = mapping2barkmat(fs, nfilts, 2 * N).to(ys_pred.device)
             W_inv = mappingfrombarkmat(W, 2 * N).to(ys_pred.device)
             mT_true = mappingfrombark(mT_true, W_inv, 2 * N).transpose(-1, -2)
-            normdiffspec = abs((ys_pred - ys_true) / (mT_true + mt_shift))
+
+            if mT_shift_is_db:
+                mT_true = amplitude_to_db(mT_true)
+
+            normdiffspec = abs((ys_pred - ys_true) / (mT_true + mT_shift))
             normdiffspec_squared = normdiffspec**2
             loss = torch.mean(normdiffspec_squared)
         else:
@@ -58,7 +63,7 @@ def psycho_acoustic_loss(
             ys_true,
             use_weighting=use_weighting,
             use_LTQ=use_LTQ,
-            mt_shift=mt_shift,
+            mT_shift=mT_shift,
             ref_dB=ref_dB,
         )
     else:
@@ -68,7 +73,7 @@ def psycho_acoustic_loss(
             ys_true[:, 0, :, :],
             use_weighting=use_weighting,
             use_LTQ=use_LTQ,
-            mt_shift=mt_shift,
+            mT_shift=mT_shift,
             ref_dB=ref_dB,
         )
         mse_right = compute_channel_loss(
@@ -76,7 +81,7 @@ def psycho_acoustic_loss(
             ys_true[:, 1, :, :],
             use_weighting=use_weighting,
             use_LTQ=use_LTQ,
-            mt_shift=mt_shift,
+            mT_shift=mT_shift,
             ref_dB=ref_dB,
         )
         mse_loss = (mse_left + mse_right) / 2  # Average loss across channels

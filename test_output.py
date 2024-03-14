@@ -11,7 +11,7 @@ def main():
     # Load audio
     fs = 44100
     N = 1024
-    nfilts = 1024
+    nfilts = 64
     mT_dB_shift = 0.02
     waveform, sample_rate = torchaudio.load("test_wavs/v_gt.wav")
     audio_gt = waveform[0]
@@ -48,7 +48,7 @@ def main():
         nfilts=nfilts,
         use_weighting=True,
         use_LTQ=False,
-        mt_shift=0.00,
+        mT_shift=0.00,
     )
     print("weighted loss: good, gt", ploss_good.item())
 
@@ -60,7 +60,7 @@ def main():
         nfilts=nfilts,
         use_weighting=True,
         use_LTQ=False,
-        mt_shift=0.00,
+        mT_shift=0.00,
     )
     print("weighted loss: bad, gt", ploss_bad.item())
     print(
@@ -159,7 +159,7 @@ def main():
         nfilts=nfilts,
         use_weighting=True,
         use_LTQ=True,
-        mt_shift=mT_dB_shift,
+        mT_shift=mT_dB_shift,
     )
     print(f"weighted loss + LTQ + shift {mT_dB_shift}: good, gt", ploss_good.item())
 
@@ -171,7 +171,7 @@ def main():
         nfilts=nfilts,
         use_weighting=True,
         use_LTQ=True,
-        mt_shift=mT_dB_shift,
+        mT_shift=mT_dB_shift,
     )
     print(f"weighted loss + LTQ + shift {mT_dB_shift}: bad, gt", ploss_bad.item())
     print(
