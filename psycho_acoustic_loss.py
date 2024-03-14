@@ -113,7 +113,7 @@ def compute_masking_threshold(ys, fs, N, nfilts=64, use_LTQ=False, ref_dB=60):
     return mTbark
 
 
-def amplitude_to_db(x, ref=1.0, amin=1e-10, top_db=80.0):
+def amplitude_to_db(x, ref=1.0, amin=1e-10, top_db=200.0):
     x = x.abs()
     x = torch.clamp(x, min=amin)
     x_db = 20.0 * torch.log10(x / ref)
