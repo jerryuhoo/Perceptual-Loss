@@ -211,13 +211,12 @@ def maskingThresholdBark(mXbark, spreadingfuncmatrix, alpha, fs, nfilts, use_LTQ
     mTbark = torch.matmul(mXbark**alpha, spreadingfuncmatrix**alpha)
     mTbark = mTbark ** (1.0 / alpha)
 
-    maxfreq = fs / 2.0
-    maxbark = hz2bark(maxfreq)
-    step_bark = maxbark / (nfilts - 1)
-    barks = torch.arange(0, nfilts) * step_bark
-    f = bark2hz(barks) + 1e-6
-
     if use_LTQ:
+        maxfreq = fs / 2.0
+        maxbark = hz2bark(maxfreq)
+        step_bark = maxbark / (nfilts - 1)
+        barks = torch.arange(0, nfilts) * step_bark
+        f = bark2hz(barks) + 1e-6
         LTQ = torch.clip(
             (
                 3.64 * (f / 1000.0) ** -0.8
