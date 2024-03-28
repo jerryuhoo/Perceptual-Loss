@@ -16,7 +16,7 @@ def psycho_acoustic_loss(
     use_LTQ=False,
     mT_shift=0,
     ref_dB=60,
-    mT_shift_is_db=True,
+    use_dB=False,
 ):
     """
     ys_pred: [batch_size, channels, N+1, frame]
@@ -43,8 +43,10 @@ def psycho_acoustic_loss(
             W_inv = mappingfrombarkmat(W, 2 * N).to(ys_pred.device)
             mT_true = mappingfrombark(mT_true, W_inv, 2 * N).transpose(-1, -2)
 
-            if mT_shift_is_db:
+            if use_dB:
                 mT_true = amplitude_to_db(mT_true)
+                ys_pred = amplitude_to_db(ys_pred)
+                ys_true = amplitude_to_db(ys_true)
 
             normdiffspec = abs((ys_pred - ys_true) / (mT_true + mT_shift))
             normdiffspec_squared = normdiffspec**2
@@ -286,15 +288,12 @@ def mapping2bark(mX, W, nfft):
     nfreqs = int(nfft / 2)
 
     # Removing the last frequency band and squaring the magnitude
-    mX = mX[:, :-1, :] ** 2
-    mX_transposed = mX.transpose(-1, -2)  # Shape should now be [batch size, n, 1024]
-
-    # Performing the matrix multiplication
-    mXbark_pre_sqrt = torch.matmul(mX_transposed, W[:, :nfreqs].T)
-
-    # Clamping to ensure non-negative values before sqrt
-    mXbark_pre_sqrt = torch.clamp(mXbark_pre_sqrt, min=0.0)
-
+    mX = mX.transpose(-1, -2)
+    mXbark_pre_sqrt = torch.matmul(
+        torch.clamp(mX[:, :, :nfreqs], min=0.0) ** (2.0),
+        # torch.abs(mX[:, :, :nfreqs]) ** (2.0),
+        W[:, :nfreqs].T,
+    )
     # Now, take the square root
     mXbark = mXbark_pre_sqrt**0.5
 

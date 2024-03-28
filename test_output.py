@@ -13,6 +13,10 @@ def main():
     N = 1024
     nfilts = 64
     mT_dB_shift = 0.02
+    normalize = False
+    if normalize:
+        ref_dB = 120
+
     waveform, sample_rate = torchaudio.load("test_wavs/v_gt.wav")
     audio_gt = waveform[0]
 
@@ -24,9 +28,11 @@ def main():
     audio_bad = waveform[0]
 
     # Compute STFT
-    ys_gt = compute_STFT(audio_gt, N=N).unsqueeze(0).unsqueeze(0)
-    ys_good = compute_STFT(audio_good, N=N).unsqueeze(0).unsqueeze(0)
-    ys_bad = compute_STFT(audio_bad, N=N).unsqueeze(0).unsqueeze(0)
+    ys_gt = compute_STFT(audio_gt, N=N, normalize=normalize).unsqueeze(0).unsqueeze(0)
+    ys_good = (
+        compute_STFT(audio_good, N=N, normalize=normalize).unsqueeze(0).unsqueeze(0)
+    )
+    ys_bad = compute_STFT(audio_bad, N=N, normalize=normalize).unsqueeze(0).unsqueeze(0)
 
     mse_loss_good_gt = F.mse_loss(ys_gt, ys_good)
     print("mse_loss_good_gt", mse_loss_good_gt.item())  # loss should be small
@@ -174,6 +180,37 @@ def main():
     print(f"weighted loss + LTQ + shift {mT_dB_shift}: bad, gt", ploss_bad.item())
     print(
         "weighted loss + LTQ: good/bad ratio, small is better",
+        ploss_good.item() / ploss_bad.item(),
+    )
+
+    # single file example with weighting and with LTQ, with dB scale
+    ploss_good = psycho_acoustic_loss(
+        ys_good,
+        ys_gt,
+        fs=sample_rate,
+        N=N,
+        nfilts=nfilts,
+        use_weighting=True,
+        use_LTQ=True,
+        mT_shift=mT_dB_shift,
+        use_dB=True,
+    )
+    print(f"weighted loss + LTQ + shift {mT_dB_shift}: good, gt", ploss_good.item())
+
+    ploss_bad = psycho_acoustic_loss(
+        ys_bad,
+        ys_gt,
+        fs=sample_rate,
+        N=N,
+        nfilts=nfilts,
+        use_weighting=True,
+        use_LTQ=True,
+        mT_shift=mT_dB_shift,
+        use_dB=True,
+    )
+    print(f"weighted loss + LTQ + dB: bad, gt", ploss_bad.item())
+    print(
+        "weighted loss + LTQ + dB: good/bad ratio, small is better",
         ploss_good.item() / ploss_bad.item(),
     )
 
