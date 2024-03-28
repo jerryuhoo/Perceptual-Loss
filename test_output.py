@@ -24,15 +24,13 @@ def main():
     audio_bad = waveform[0]
 
     # Compute STFT
-    ys_gt_align = compute_STFT(audio_gt, N=N).unsqueeze(0).unsqueeze(0)
+    ys_gt = compute_STFT(audio_gt, N=N).unsqueeze(0).unsqueeze(0)
     ys_good = compute_STFT(audio_good, N=N).unsqueeze(0).unsqueeze(0)
     ys_bad = compute_STFT(audio_bad, N=N).unsqueeze(0).unsqueeze(0)
 
-    ys_gt_align = ys_gt_align[:, :, :, : ys_good.shape[-1]]
-
-    mse_loss_good_gt = F.mse_loss(ys_gt_align, ys_good)
+    mse_loss_good_gt = F.mse_loss(ys_gt, ys_good)
     print("mse_loss_good_gt", mse_loss_good_gt.item())  # loss should be small
-    mse_loss_bad_gt = F.mse_loss(ys_gt_align, ys_bad)
+    mse_loss_bad_gt = F.mse_loss(ys_gt, ys_bad)
     print("mse_loss_bad_gt", mse_loss_bad_gt.item())  # loss should be large
     print(
         "mse loss: good/bad ratio, small is better",
@@ -41,8 +39,8 @@ def main():
 
     # single file example with weighting
     ploss_good = psycho_acoustic_loss(
-        ys_gt_align,
         ys_good,
+        ys_gt,
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
@@ -53,8 +51,8 @@ def main():
     print("weighted loss: good, gt", ploss_good.item())
 
     ploss_bad = psycho_acoustic_loss(
-        ys_gt_align,
         ys_bad,
+        ys_gt,
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
@@ -71,8 +69,8 @@ def main():
 
     # single file example without weighting
     ploss_good = psycho_acoustic_loss(
-        ys_gt_align,
         ys_good,
+        ys_gt,
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
@@ -82,8 +80,8 @@ def main():
     print("psy loss: good, gt", ploss_good.item())
 
     ploss_bad = psycho_acoustic_loss(
-        ys_gt_align,
         ys_bad,
+        ys_gt,
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
@@ -98,8 +96,8 @@ def main():
 
     # single file example with weighting and LTQ
     ploss_good = psycho_acoustic_loss(
-        ys_gt_align,
         ys_good,
+        ys_gt,
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
@@ -109,8 +107,8 @@ def main():
     print("weighted loss + LTQ: good, gt", ploss_good.item())
 
     ploss_bad = psycho_acoustic_loss(
-        ys_gt_align,
         ys_bad,
+        ys_gt,
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
@@ -125,8 +123,8 @@ def main():
 
     # single file example without weighting and with LTQ
     ploss_good = psycho_acoustic_loss(
-        ys_gt_align,
         ys_good,
+        ys_gt,
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
@@ -136,8 +134,8 @@ def main():
     print("psy loss + LTQ: good, gt", ploss_good.item())
 
     ploss_bad = psycho_acoustic_loss(
-        ys_gt_align,
         ys_bad,
+        ys_gt,
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
@@ -152,8 +150,8 @@ def main():
 
     # single file example with weighting and with LTQ, with mT_dB_shift
     ploss_good = psycho_acoustic_loss(
-        ys_gt_align,
         ys_good,
+        ys_gt,
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
@@ -164,8 +162,8 @@ def main():
     print(f"weighted loss + LTQ + shift {mT_dB_shift}: good, gt", ploss_good.item())
 
     ploss_bad = psycho_acoustic_loss(
-        ys_gt_align,
         ys_bad,
+        ys_gt,
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
