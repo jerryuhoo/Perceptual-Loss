@@ -44,11 +44,12 @@ def psycho_acoustic_loss(
             mT_true = mappingfrombark(mT_true, W_inv, 2 * N).transpose(-1, -2)
 
             if use_dB:
-                mT_true = amplitude_to_db(mT_true)
-                ys_pred = amplitude_to_db(ys_pred)
-                ys_true = amplitude_to_db(ys_true)
-
-            normdiffspec = abs((ys_pred - ys_true) / (mT_true + mT_shift))
+                normdiffspec = abs(
+                    (torch.log(ys_pred + 1 + 1e-6) - torch.log(ys_true + 1 + 1e-6))
+                    / (torch.log(mT_true + 1 + 1e-6) + mT_shift)
+                )
+            else:
+                normdiffspec = abs((ys_pred - ys_true) / (mT_true + mT_shift))
             normdiffspec_squared = normdiffspec**2
             loss = torch.mean(normdiffspec_squared)
         else:
