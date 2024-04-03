@@ -17,6 +17,7 @@ def psycho_acoustic_loss(
     mT_shift=0,
     ref_dB=60,
     use_dB=False,
+    alpha=1.0,
 ):
     """
     ys_pred: [batch_size, channels, N+1, frame]
@@ -42,14 +43,66 @@ def psycho_acoustic_loss(
             W = mapping2barkmat(fs, nfilts, 2 * N).to(ys_pred.device)
             W_inv = mappingfrombarkmat(W, 2 * N).to(ys_pred.device)
             mT_true = mappingfrombark(mT_true, W_inv, 2 * N).transpose(-1, -2)
+            # print("mT_true", mT_true[:, :, 1:, :].shape)
+            # print("mT_true", mT_true[:, :, 1:, :].min(), mT_true[:, :, 1:, :].max())
+            # plot the mt at the 100th frame in 1D array
 
             if use_dB:
-                normdiffspec = abs(
-                    (torch.log(ys_pred + 1 + 1e-6) - torch.log(ys_true + 1 + 1e-6))
-                    / (torch.log(mT_true + 1 + 1e-6) + mT_shift)
-                )
+                mT_true = torch.log10(mT_true + mT_shift + 1 + 1e-6)
             else:
-                normdiffspec = abs((ys_pred - ys_true) / (mT_true + mT_shift))
+                mT_true = mT_true + mT_shift
+
+            # plt.figure(figsize=(10, 6))
+            # plt.plot(mT_true[0, 0, 1:, 100].cpu().numpy())
+            # plt.xlabel("Time Frames")
+            # plt.ylabel("Frequency Bins")
+            # plt.title("Masking Threshold")
+            # plt.show()
+
+            if use_dB:
+                max_value = 1
+            else:
+                max_value = 7
+
+            # mt_weight = max_value - mT_true
+            # mt_weight = torch.clamp(mt_weight, min=0.1) / max_value
+
+            # original
+            mt_weight = 1 / mT_true
+
+            # plot the mt_weight at the 100th frame in 1D array
+            # plt.figure(figsize=(10, 6))
+            # plt.plot(mt_weight[0, 0, 1:, 100].cpu().numpy())
+            # plt.xlabel("Time Frames")
+            # plt.ylabel("Frequency Bins")
+            # plt.title("Masking Threshold Weight")
+            # plt.show()
+
+            if use_dB:
+                # normdiffspec = abs(
+                #     (torch.log(ys_pred + 1 + 1e-6) - torch.log(ys_true + 1 + 1e-6))
+                #     / (torch.log(mT_true + 1 + 1e-6) + mT_shift)
+                # )
+                normdiffspec = abs(ys_pred - ys_true) * (1 - alpha + alpha * mt_weight)
+                # print("normdiffspec", normdiffspec.shape)
+                # plot the 100th frame
+                # plt.figure(figsize=(10, 6))
+                # plt.plot(
+                #     abs(ys_pred - ys_true)[0, 0, :, 100].cpu().numpy(),
+                #     label="Original Difference",
+                # )
+                # plt.plot(
+                #     normdiffspec[0, 0, :, 100].cpu().numpy(),
+                #     label="Weighted Difference",
+                # )
+                # plt.xlabel("Time Frames")
+                # plt.ylabel("Frequency Bins")
+                # plt.title("YS Difference with and without Weighting")
+                # plt.legend()
+                # plt.show()
+            else:
+                normdiffspec = abs(ys_pred - ys_true) * (1 - alpha + alpha * mt_weight)
+                # normdiffspec = abs((ys_pred - ys_true) / (mT_true + mT_shift))
             normdiffspec_squared = normdiffspec**2
             loss = torch.mean(normdiffspec_squared)
         else:
