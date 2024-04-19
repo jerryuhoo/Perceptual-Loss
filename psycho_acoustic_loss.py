@@ -52,27 +52,6 @@ def psycho_acoustic_loss(
             else:
                 mT_true = mT_true + mT_shift
 
-            # plot the mt at the 100th frame in 1D array
-            if plot:
-                plt.figure(figsize=(10, 6))
-                plot_value = mT_true[0, 0, :, 100].cpu().numpy()
-                plt.plot(
-                    plot_value,
-                    label="Masking Threshold",
-                    color="green",
-                )
-                plt.plot(
-                    ys_true[0, 0, :, 100].cpu().numpy(),
-                    label="Spectrum",
-                    alpha=0.7,
-                    linewidth=0.5,
-                )
-                plt.xlabel("Frequency Bins")
-                plt.ylabel("Magnitude")
-                plt.title("Masking Threshold")
-                plt.legend()
-                plt.show()
-
             if method == "MTWSD":
                 mt_weight = 1 / mT_true
             elif method == "MTWSD_scaled":
@@ -82,62 +61,54 @@ def psycho_acoustic_loss(
                     max_value = 7
                 mt_weight = max_value - mT_true
                 mt_weight = torch.clamp(mt_weight, min=0.1) / max_value
-
-                # plot the mt_weight at the 100th frame in 1D array
-                if plot:
-                    plt.figure(figsize=(10, 6))
-                    plt.plot(mt_weight[0, 0, 1:, 100].cpu().numpy())
-                    plt.xlabel("Frequency Bins")
-                    plt.ylabel("Weight Value")
-                    plt.title("Masking Threshold Weight")
-                    plt.show()
             elif method == "SMR_weighted":
                 epsilon = 1e-8
                 mT_true_safe = torch.where(
                     mT_true == 0, torch.full_like(mT_true, epsilon), mT_true
                 )
                 mt_weight = torch.clamp(ys_true / mT_true_safe, max=10)
-                if plot:
-                    plt.figure(figsize=(10, 8))
+            if plot:
+                plt.figure(figsize=(10, 8))
 
-                    # Subplot 1: Masking Thresholds
-                    plt.subplot(2, 1, 1)
-                    plt.plot(
-                        ys_true[0, 0, :, 100].cpu().numpy(),
-                        label="Spectrum",
-                        alpha=0.7,
-                        linewidth=0.5,
-                        color="blue",
-                    )
-                    plt.plot(
-                        mT_true[0, 0, :, 100].cpu().numpy(),
-                        label="Masking Threshold",
-                        alpha=0.7,
-                        linewidth=0.5,
-                        color="green",
-                    )
-                    plt.xlabel("Frequency Bins")
-                    plt.ylabel("Magnitude")
-                    plt.title("Masking Thresholds")
-                    plt.xlim(0, 100)
-                    plt.legend()
+                # Subplot 1: Masking Thresholds
+                plt.subplot(2, 1, 1)
+                plt.plot(
+                    ys_true[0, 0, :, 100].cpu().numpy(),
+                    label="Spectrum",
+                    alpha=0.7,
+                    linewidth=0.5,
+                    color="blue",
+                )
+                plt.plot(
+                    mT_true[0, 0, :, 100].cpu().numpy(),
+                    label="Masking Threshold",
+                    alpha=0.7,
+                    linewidth=0.5,
+                    color="green",
+                )
+                plt.xlabel("Frequency Bins")
+                plt.ylabel("Magnitude")
+                plt.title("Masking Thresholds")
+                plt.xlim(0, 100)
+                plt.legend()
 
-                    # Subplot 2: Masking Threshold Weight
-                    plt.subplot(2, 1, 2)
-                    plot_value = mt_weight[0, 0, :, 100].cpu().numpy()
-                    plt.plot(
-                        plot_value,
-                        label="Masking Threshold Weight",
-                        color="red",
-                        linewidth=0.5,
-                    )
-                    plt.xlabel("Frequency Bins")
-                    plt.ylabel("Magnitude")
-                    plt.title("Masking Threshold Weight")
-                    plt.xlim(0, 100)
-                    plt.legend()
-                    plt.tight_layout()
-                    plt.show()
+                # Subplot 2: Masking Threshold Weight
+                plt.subplot(2, 1, 2)
+                plot_value = mt_weight[0, 0, :, 100].cpu().numpy()
+                plt.plot(
+                    plot_value,
+                    label="Masking Threshold Weight",
+                    color="red",
+                    linewidth=0.5,
+                )
+                plt.xlabel("Frequency Bins")
+                plt.ylabel("Magnitude")
+                plt.title("Masking Threshold Weight")
+                plt.xlim(0, 100)
+                plt.legend()
+                plt.suptitle(f"Method: {method}")
+                plt.tight_layout(rect=[0, 0, 1, 0.95])
+                plt.show()
 
             normdiffspec = abs(ys_pred - ys_true) * (1 - alpha + alpha * mt_weight)
             normdiffspec_squared = normdiffspec**2
