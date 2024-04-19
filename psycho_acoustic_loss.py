@@ -12,7 +12,7 @@ def psycho_acoustic_loss(
     fs=44100,
     N=1024,
     nfilts=64,
-    use_weighting=True,
+    method="SMR_weighted",
     use_LTQ=False,
     mT_shift=0,
     ref_dB=60,
@@ -32,84 +32,135 @@ def psycho_acoustic_loss(
         )
 
     # Function to compute MSE loss for a single channel
-    def compute_channel_loss(
-        ys_pred, ys_true, use_weighting, use_LTQ, mT_shift, ref_dB=60
-    ):
+    def compute_channel_loss(ys_pred, ys_true):
+        plot = False
+        # method = (
+        #     "MTD"  # MTD or MTWSD or MTWSD_scaled or SMR_weighted or SAL or SAL_softplus
+        # )
         mT_true = compute_masking_threshold(
             ys_true, fs, N, nfilts, use_LTQ=use_LTQ, ref_dB=ref_dB
         )
-        if use_weighting:
+        if method == "MTWSD" or method == "MTWSD_scaled" or method == "SMR_weighted":
+            # expand mT_true from [batch_size, frames, nfilts] to [batch_size, 1, N+1, frames]
             mT_true = mT_true.unsqueeze(1)
             W = mapping2barkmat(fs, nfilts, 2 * N).to(ys_pred.device)
             W_inv = mappingfrombarkmat(W, 2 * N).to(ys_pred.device)
             mT_true = mappingfrombark(mT_true, W_inv, 2 * N).transpose(-1, -2)
-            # print("mT_true", mT_true[:, :, 1:, :].shape)
-            # print("mT_true", mT_true[:, :, 1:, :].min(), mT_true[:, :, 1:, :].max())
-            # plot the mt at the 100th frame in 1D array
 
             if use_dB:
                 mT_true = torch.log10(mT_true + mT_shift + 1 + 1e-6)
             else:
                 mT_true = mT_true + mT_shift
 
-            # plt.figure(figsize=(10, 6))
-            # plt.plot(mT_true[0, 0, 1:, 100].cpu().numpy())
-            # plt.xlabel("Time Frames")
-            # plt.ylabel("Frequency Bins")
-            # plt.title("Masking Threshold")
-            # plt.show()
+            # plot the mt at the 100th frame in 1D array
+            if plot:
+                plt.figure(figsize=(10, 6))
+                plot_value = mT_true[0, 0, :, 100].cpu().numpy()
+                plt.plot(
+                    plot_value,
+                    label="Masking Threshold",
+                    color="green",
+                )
+                plt.plot(
+                    ys_true[0, 0, :, 100].cpu().numpy(),
+                    label="Spectrum",
+                    alpha=0.7,
+                    linewidth=0.5,
+                )
+                plt.xlabel("Frequency Bins")
+                plt.ylabel("Magnitude")
+                plt.title("Masking Threshold")
+                plt.legend()
+                plt.show()
 
-            if use_dB:
-                max_value = 1
-            else:
-                max_value = 7
+            if method == "MTWSD":
+                mt_weight = 1 / mT_true
+            elif method == "MTWSD_scaled":
+                if use_dB:
+                    max_value = 1
+                else:
+                    max_value = 7
+                mt_weight = max_value - mT_true
+                mt_weight = torch.clamp(mt_weight, min=0.1) / max_value
 
-            # mt_weight = max_value - mT_true
-            # mt_weight = torch.clamp(mt_weight, min=0.1) / max_value
+                # plot the mt_weight at the 100th frame in 1D array
+                if plot:
+                    plt.figure(figsize=(10, 6))
+                    plt.plot(mt_weight[0, 0, 1:, 100].cpu().numpy())
+                    plt.xlabel("Frequency Bins")
+                    plt.ylabel("Weight Value")
+                    plt.title("Masking Threshold Weight")
+                    plt.show()
+            elif method == "SMR_weighted":
+                mt_weight = ys_true / mT_true
+                if plot:
+                    plt.figure(figsize=(10, 6))
+                    plot_value = mt_weight[0, 0, :, 100].cpu().numpy()
+                    plt.plot(
+                        ys_true[0, 0, :, 100].cpu().numpy(),
+                        label="Spectrum",
+                        alpha=0.7,
+                        linewidth=0.5,
+                        color="blue",
+                    )
+                    plt.plot(
+                        mT_true[0, 0, :, 100].cpu().numpy(),
+                        label="Masking Threshold",
+                        alpha=0.7,
+                        linewidth=0.5,
+                        color="green",
+                    )
+                    plt.xlabel("Frequency Bins")
+                    plt.ylabel("Magnitude")
+                    plt.title("Masking Thresholds")
+                    plt.legend()
+                    plt.show()
 
-            # original
-            mt_weight = 1 / mT_true
+                    plt.plot(
+                        plot_value,
+                        label="Masking Threshold Weight",
+                        color="red",
+                    )
+                    plt.xlabel("Frequency Bins")
+                    plt.ylabel("Magnitude")
+                    plt.title("Masking Threshold Weight")
+                    plt.legend()
+                    plt.show()
 
-            # plot the mt_weight at the 100th frame in 1D array
-            # plt.figure(figsize=(10, 6))
-            # plt.plot(mt_weight[0, 0, 1:, 100].cpu().numpy())
-            # plt.xlabel("Time Frames")
-            # plt.ylabel("Frequency Bins")
-            # plt.title("Masking Threshold Weight")
-            # plt.show()
-
-            if use_dB:
-                # normdiffspec = abs(
-                #     (torch.log(ys_pred + 1 + 1e-6) - torch.log(ys_true + 1 + 1e-6))
-                #     / (torch.log(mT_true + 1 + 1e-6) + mT_shift)
-                # )
-                normdiffspec = abs(ys_pred - ys_true) * (1 - alpha + alpha * mt_weight)
-                # print("normdiffspec", normdiffspec.shape)
-                # plot the 100th frame
-                # plt.figure(figsize=(10, 6))
-                # plt.plot(
-                #     abs(ys_pred - ys_true)[0, 0, :, 100].cpu().numpy(),
-                #     label="Original Difference",
-                # )
-                # plt.plot(
-                #     normdiffspec[0, 0, :, 100].cpu().numpy(),
-                #     label="Weighted Difference",
-                # )
-                # plt.xlabel("Time Frames")
-                # plt.ylabel("Frequency Bins")
-                # plt.title("YS Difference with and without Weighting")
-                # plt.legend()
-                # plt.show()
-            else:
-                normdiffspec = abs(ys_pred - ys_true) * (1 - alpha + alpha * mt_weight)
-                # normdiffspec = abs((ys_pred - ys_true) / (mT_true + mT_shift))
+            normdiffspec = abs(ys_pred - ys_true) * (1 - alpha + alpha * mt_weight)
             normdiffspec_squared = normdiffspec**2
             loss = torch.mean(normdiffspec_squared)
-        else:
+        elif method == "MTD":
             mT_pred = compute_masking_threshold(
                 ys_pred, fs, N, nfilts, use_LTQ=use_LTQ, ref_dB=ref_dB
             )
             loss = F.mse_loss(mT_pred, mT_true)
+        elif method == "SAL" or method == "SAL_softplus":
+            mT_true = mT_true.unsqueeze(1)
+            W = mapping2barkmat(fs, nfilts, 2 * N).to(ys_pred.device)
+            W_inv = mappingfrombarkmat(W, 2 * N).to(ys_pred.device)
+            mT_true = mappingfrombark(mT_true, W_inv, 2 * N).transpose(-1, -2)
+
+            # ys_pred = amplitude_to_db(ys_pred)
+            # ys_true = amplitude_to_db(ys_true)
+            # mT_true = amplitude_to_db(mT_true)
+
+            if method == "SAL":
+                diff = torch.where(
+                    ys_true > mT_true,
+                    abs(ys_pred - ys_true),
+                    torch.clamp(ys_pred - mT_true, min=0),
+                )
+            elif method == "SAL_softplus":
+                diff = torch.where(
+                    ys_true > mT_true,
+                    abs(ys_pred - ys_true),
+                    F.softplus(ys_pred - mT_true),
+                )
+            else:
+                raise ValueError(f"Unsupported method: {method}")
+
+            loss = torch.mean(diff**2)
         return loss
 
     if channels == 1:
@@ -117,28 +168,16 @@ def psycho_acoustic_loss(
         mse_loss = compute_channel_loss(
             ys_pred,
             ys_true,
-            use_weighting=use_weighting,
-            use_LTQ=use_LTQ,
-            mT_shift=mT_shift,
-            ref_dB=ref_dB,
         )
     else:
         # Stereo audio
         mse_left = compute_channel_loss(
             ys_pred[:, 0, :, :],
             ys_true[:, 0, :, :],
-            use_weighting=use_weighting,
-            use_LTQ=use_LTQ,
-            mT_shift=mT_shift,
-            ref_dB=ref_dB,
         )
         mse_right = compute_channel_loss(
             ys_pred[:, 1, :, :],
             ys_true[:, 1, :, :],
-            use_weighting=use_weighting,
-            use_LTQ=use_LTQ,
-            mT_shift=mT_shift,
-            ref_dB=ref_dB,
         )
         mse_loss = (mse_left + mse_right) / 2  # Average loss across channels
 
@@ -165,6 +204,22 @@ def compute_masking_threshold(ys, fs, N, nfilts=64, use_LTQ=False, ref_dB=60):
 
     # Compute mXbark for all frames at once
     mXbark = mapping2bark(torch.abs(ys), W, 2 * N)
+
+    plot = False
+
+    # plot mXbark in 2D array
+    if plot:
+        plt.figure(figsize=(10, 6))
+        plt.imshow(
+            mXbark[0].T,
+            aspect="auto",
+            origin="lower",
+        )
+        plt.colorbar(label="Amplitude")
+        plt.xlabel("Time Frames")
+        plt.ylabel("Bark Scale")
+        plt.title("Spectrogram in Bark Scale")
+        plt.show()
 
     # Compute mTbark for all frames at once
     mTbark = maskingThresholdBark(
@@ -397,18 +452,21 @@ def recon_stft_from_bark_and_quantize(ys, fs=44100, nfilts=64, mT_dB_shift=0):
     mXbark = mapping2bark(torch.abs(ys), W, 2 * N)
 
     example = mXbark[0]
-    plt.figure(figsize=(10, 6))
-    plt.imshow(
-        example.T,
-        aspect="auto",
-        origin="lower",
-        extent=[0, example.shape[0], 0, example.shape[1]],
-    )
-    plt.colorbar(label="Amplitude")
-    plt.xlabel("Time Frames")
-    plt.ylabel("Bark Scale")
-    plt.title("Spectrogram in Bark Scale")
-    # plt.show()
+
+    plot = False
+    if plot:
+        plt.figure(figsize=(10, 6))
+        plt.imshow(
+            example.T,
+            aspect="auto",
+            origin="lower",
+            extent=[0, example.shape[0], 0, example.shape[1]],
+        )
+        plt.colorbar(label="Amplitude")
+        plt.xlabel("Time Frames")
+        plt.ylabel("Bark Scale")
+        plt.title("Spectrogram in Bark Scale")
+        plt.show()
 
     mTbark = maskingThresholdBark(
         mXbark, spreadingfuncmatrix, alpha, fs, nfilts, use_LTQ=False
@@ -434,101 +492,96 @@ def recon_stft_from_bark_and_quantize(ys, fs=44100, nfilts=64, mT_dB_shift=0):
     smax_to_mask_ratio_frame = smax_to_mask_ratio_dB[0, :, frame_index]
 
     # plot the spectrum and masking threshold for the 100th frame
-    plt.figure(figsize=(10, 6))
-    freqs = np.linspace(0, 1024, 1025)  # 1025 frequency bins
-    plt.plot(freqs, ys_frame, label="Spectrum")
-    plt.plot(freqs, mT_frame, label="Masking Threshold", linestyle="--")
-    plt.plot(freqs, smr_frame, label="SMR", linestyle="dotted")
-    plt.plot(
-        freqs, smax_to_mask_ratio_frame, label="Smax to Mask Ratio", linestyle="--"
-    )
-    plt.xlabel("Frequency (Hz)")
-    plt.ylabel("Amplitude")
-    plt.title(
-        f"Spectrum and Masking Threshold at Frame={frame_index}, mT_dB_shift={mT_dB_shift} dB"
-    )
-    plt.legend()
-    # plt.show()
+    if plot:
+        plt.figure(figsize=(10, 6))
+        freqs = np.linspace(0, 1024, 1025)  # 1025 frequency bins
+        plt.plot(freqs, ys_frame, label="Spectrum")
+        plt.plot(freqs, mT_frame, label="Masking Threshold", linestyle="--")
+        plt.plot(freqs, smr_frame, label="SMR", linestyle="dotted")
+        plt.plot(
+            freqs, smax_to_mask_ratio_frame, label="Smax to Mask Ratio", linestyle="--"
+        )
+        plt.xlabel("Frequency (Hz)")
+        plt.ylabel("Amplitude")
+        plt.title(
+            f"Spectrum and Masking Threshold at Frame={frame_index}, mT_dB_shift={mT_dB_shift} dB"
+        )
+        plt.legend()
+        plt.show()
 
     quantization_bits = smax_to_mask_ratio_dB // 6
     # quantization_bits = torch.fill_(quantization_bits, 5)
 
     # plot quantization bits
-    plt.figure(figsize=(10, 6))
-    plt.imshow(
-        quantization_bits.squeeze().cpu().numpy(),
-        aspect="auto",
-        origin="lower",
-        extent=[
-            0,
-            quantization_bits.squeeze().shape[1],
-            0,
-            quantization_bits.squeeze().shape[0],
-        ],
-    )
-    plt.colorbar(label="Quantization Bits")
-    plt.xlabel("Time Frames")
-    plt.ylabel("Frequency Bins")
-    plt.title("Quantization Bits")
-    # plt.show()
+    if plot:
+        plt.figure(figsize=(10, 6))
+        plt.imshow(
+            quantization_bits.squeeze().cpu().numpy(),
+            aspect="auto",
+            origin="lower",
+            extent=[
+                0,
+                quantization_bits.squeeze().shape[1],
+                0,
+                quantization_bits.squeeze().shape[0],
+            ],
+        )
+        plt.colorbar(label="Quantization Bits")
+        plt.xlabel("Time Frames")
+        plt.ylabel("Frequency Bins")
+        plt.title("Quantization Bits")
+        plt.show()
 
     quantized_stft = torch.zeros_like(ys)
-    # print("quantized_stft", quantized_stft.shape)
-    # print("quantization_bits", quantization_bits.shape)
+
     for i in range(ys.shape[1]):  # bin
         for j in range(ys.shape[2]):  # frame
-            # print("ys            [0, i, j]", ys[0, i, j])
             quantized_stft[0, i, j] = quantize(ys[0, i, j], quantization_bits[0, i, j])
-            # print("quantized_stft[0, i, j]", quantized_stft[0, i, j])
 
-    # raise ValueError("stop")
-    # plt.figure(figsize=(20, 8))
+    if plot:
+        plt.figure(figsize=(20, 8))
 
-    # plt.subplot(1, 2, 1)
-    # plt.title("ys Spectrum")
-    # plt.imshow(
-    #     20 * np.log10(np.abs(ys.squeeze().cpu().numpy() + 1e-8)),
-    #     aspect="auto",
-    #     origin="lower",
-    #     extent=[0, fs / 2, 0, ys.shape[0]],
-    # )
-    # plt.colorbar(label="Magnitude (dB)")
-    # plt.xlabel("Frequency (Hz)")
-    # plt.ylabel("Frame")
+        plt.subplot(1, 2, 1)
+        plt.title("ys Spectrum")
+        plt.imshow(
+            20 * np.log10(np.abs(ys.squeeze().cpu().numpy() + 1e-8)),
+            aspect="auto",
+            origin="lower",
+            extent=[0, fs / 2, 0, ys.shape[0]],
+        )
+        plt.colorbar(label="Magnitude (dB)")
+        plt.xlabel("Frequency (Hz)")
+        plt.ylabel("Frame")
 
-    # plt.subplot(1, 2, 2)
-    # plt.title(f"quantized_stft quantized Spectrum at mT_dB_shift={mT_dB_shift} dB")
-    # plt.imshow(
-    #     20 * np.log10(np.abs(quantized_stft.squeeze().cpu().numpy() + 1e-8)),
-    #     aspect="auto",
-    #     origin="lower",
-    #     extent=[0, fs / 2, 0, quantized_stft.shape[0]],
-    # )
-    # plt.colorbar(label="Magnitude (dB)")
-    # plt.xlabel("Frequency (Hz)")
-    # plt.ylabel("Frame")
+        plt.subplot(1, 2, 2)
+        plt.title(f"quantized_stft quantized Spectrum at mT_dB_shift={mT_dB_shift} dB")
+        plt.imshow(
+            20 * np.log10(np.abs(quantized_stft.squeeze().cpu().numpy() + 1e-8)),
+            aspect="auto",
+            origin="lower",
+            extent=[0, fs / 2, 0, quantized_stft.shape[0]],
+        )
+        plt.colorbar(label="Magnitude (dB)")
+        plt.xlabel("Frequency (Hz)")
+        plt.ylabel("Frame")
 
-    # plt.show()
+        plt.show()
 
     return quantized_stft
 
 
 def plot_results(ys, fs, N, nfilts=64):
     mT = compute_masking_threshold(ys, fs, N, nfilts)
-
     # Convert STFT magnitude to dB for visualization
     ys = ys.squeeze()
-    mT = mT.squeeze()
+    mT = mT.unsqueeze(1)
+    W = mapping2barkmat(fs, nfilts, 2 * N).to(ys.device)
+    W_inv = mappingfrombarkmat(W, 2 * N).to(ys.device)
+    mT = mappingfrombark(mT, W_inv, 2 * N).transpose(-1, -2).squeeze()
 
     ys_dB = 20 * torch.log10(torch.abs(ys) + 1e-6)
     # Convert masking threshold to dB for visualization
-    mT_dB = 20 * torch.log10(mT + 1e-6).transpose(0, 1)
-
-    # print("mT", mT_dB)
-    # print("mTbarkquant", mTbarkquant)
-
-    # print("mt_dB", mT_dB.shape)
-    # print("ys_dB", ys_dB.shape)
+    mT_dB = 20 * torch.log10(mT + 1e-6)
 
     # Frequency and Time vectors for plotting
     f = np.linspace(0, fs / 2, ys.shape[0])
@@ -539,19 +592,20 @@ def plot_results(ys, fs, N, nfilts=64):
 
     # Plot Spectrogram
     plt.subplot(3, 1, 1)
-    plt.pcolormesh(t, f, ys_dB.numpy(), shading="gouraud", vmin=0, vmax=60)
+    plt.pcolormesh(t, f, ys_dB.numpy(), shading="gouraud")
     plt.colorbar(label="dB")
     plt.title("Spectrogram")
     plt.ylabel("Frequency (Hz)")
 
     # Plot Spectrum and Masking Threshold of Middle Frame
     middle_frame_idx = len(t) // 2
+    print("middle_frame_idx", middle_frame_idx)
     plt.subplot(3, 1, 2)
-    # print("ys", ys_dB[:, middle_frame_idx].numpy())
-    # print("mt", mT_dB[:, middle_frame_idx].numpy())
+
     plt.plot(
         f, ys_dB[:, middle_frame_idx].numpy(), color="blue", label="Spectrum", alpha=0.7
     )
+
     plt.plot(
         f,
         mT_dB[:, middle_frame_idx].numpy(),
@@ -559,18 +613,7 @@ def plot_results(ys, fs, N, nfilts=64):
         label="Masking Threshold",
         alpha=0.7,
     )
-    mTbarkquant = mTbarkquant.squeeze()
-    W, _, alpha = get_analysis_params(fs, N, nfilts)
-    W_inv = mappingfrombarkmat(W, 2 * N)
-    mTbarkquant = mappingfrombark(mTbarkquant, W_inv, 2 * N).transpose(0, 1)
-    # print("mTbarkquant", mTbarkquant.shape)
-    plt.plot(
-        f,
-        mTbarkquant[:, middle_frame_idx].numpy(),
-        color="green",
-        label="Masking Threshold (quantized)",
-        alpha=0.7,
-    )
+
     plt.legend()
     plt.title(f"Spectrum and Masking Threshold at t = {t[middle_frame_idx]:.2f} s")
     plt.xlabel("Frequency (Hz)")
@@ -597,7 +640,8 @@ def plot_results(ys, fs, N, nfilts=64):
     plt.ylabel("Amplitude (Voltage)")
 
     plt.tight_layout()
-    plt.savefig("spectrogram_with_masking_threshold.png")
+    plt.show()
+    # plt.savefig("spectrogram_with_masking_threshold.png")
 
 
 def main():
@@ -622,6 +666,8 @@ def main():
 
     ys_mp3_align = ys_mp3_align[:, :, :, : ys_original.shape[-1]]
 
+    # plot_results(ys_mp3_align, fs, N, nfilts)
+
     mse_loss_mp3 = F.mse_loss(ys_mp3_align, ys_original)
     print("mse_loss_mp3", mse_loss_mp3.item())
     mse_loss_quant = F.mse_loss(ys_quantized, ys_original)
@@ -632,17 +678,19 @@ def main():
         mse_loss_mp3.item() / mse_loss_quant.item(),
     )
 
-    # single file example with weighting
+    print("=====================================")
+
+    # MTD
     mp3_ploss = psycho_acoustic_loss(
         ys_mp3_align,
         ys_original,
         fs=sample_rate,
         N=1024,
         nfilts=64,
-        use_weighting=True,
+        method="MTD",
         use_LTQ=False,
     )
-    print("weighted loss: mp3, original", mp3_ploss.item())
+    print("MTD loss: mp3, original", mp3_ploss.item())
 
     quant_ploss = psycho_acoustic_loss(
         ys_quantized,
@@ -650,26 +698,28 @@ def main():
         fs=sample_rate,
         N=1024,
         nfilts=64,
-        use_weighting=True,
+        method="MTD",
         use_LTQ=False,
     )
-    print("weighted loss: quantized, original", quant_ploss.item())
+    print("MTD loss: quantized, original", quant_ploss.item())
     print(
-        "weighted loss: mp3/quant ratio, small is better",
+        "MTD loss: mp3/quant ratio, small is better",
         mp3_ploss.item() / quant_ploss.item(),
     )
 
-    # single file example without weighting
+    print("=====================================")
+
+    # MTWSD
     mp3_ploss = psycho_acoustic_loss(
         ys_mp3_align,
         ys_original,
         fs=sample_rate,
         N=1024,
         nfilts=64,
-        use_weighting=False,
+        method="MTWSD",
         use_LTQ=False,
     )
-    print("mt diff loss: mp3, original", mp3_ploss.item())
+    print("MTWSD loss: mp3, original", mp3_ploss.item())
 
     quant_ploss = psycho_acoustic_loss(
         ys_quantized,
@@ -677,26 +727,28 @@ def main():
         fs=sample_rate,
         N=1024,
         nfilts=64,
-        use_weighting=False,
+        method="MTWSD",
         use_LTQ=False,
     )
-    print("mt diff loss: quantized, original", quant_ploss.item())
+    print("MTWSD loss: quantized, original", quant_ploss.item())
     print(
-        "mt diff loss: mp3/quant ratio, small is better",
+        "MTWSD loss: mp3/quant ratio, small is better",
         mp3_ploss.item() / quant_ploss.item(),
     )
 
-    # single file example with weighting and LTQ
+    print("=====================================")
+
+    # MTWSD_scaled
     mp3_ploss = psycho_acoustic_loss(
         ys_mp3_align,
         ys_original,
         fs=sample_rate,
         N=1024,
         nfilts=64,
-        use_weighting=True,
+        method="MTWSD_scaled",
         use_LTQ=True,
     )
-    print("weighted loss + LTQ: mp3, original", mp3_ploss.item())
+    print("MTWSD_scaled: mp3, original", mp3_ploss.item())
 
     quant_ploss = psycho_acoustic_loss(
         ys_quantized,
@@ -704,26 +756,28 @@ def main():
         fs=sample_rate,
         N=1024,
         nfilts=64,
-        use_weighting=True,
+        method="MTWSD_scaled",
         use_LTQ=True,
     )
-    print("weighted loss + LTQ: quantized, original", quant_ploss.item())
+    print("MTWSD_scaled loss: quantized, original", quant_ploss.item())
     print(
-        "weighted loss + LTQ: mp3/quant ratio, small is better",
+        "MTWSD_scaled loss: mp3/quant ratio, small is better",
         mp3_ploss.item() / quant_ploss.item(),
     )
 
-    # single file example without weighting and with LTQ
+    print("=====================================")
+
+    # SMR_weighted
     mp3_ploss = psycho_acoustic_loss(
         ys_mp3_align,
         ys_original,
         fs=sample_rate,
         N=1024,
         nfilts=64,
-        use_weighting=False,
-        use_LTQ=True,
+        method="SMR_weighted",
+        use_LTQ=False,
     )
-    print("mt diff loss + LTQ: mp3, original", mp3_ploss.item())
+    print("SMR_weighted loss: mp3, original", mp3_ploss.item())
 
     quant_ploss = psycho_acoustic_loss(
         ys_quantized,
@@ -731,63 +785,105 @@ def main():
         fs=sample_rate,
         N=1024,
         nfilts=64,
-        use_weighting=False,
-        use_LTQ=True,
+        method="SMR_weighted",
+        use_LTQ=False,
     )
-    print("mt diff loss + LTQ: quantized, original", quant_ploss.item())
+    print("SMR_weighted: quantized, original", quant_ploss.item())
     print(
-        "mt diff loss + LTQ: mp3/quant ratio, small is better",
+        "SMR_weighted: mp3/quant ratio, small is better",
         mp3_ploss.item() / quant_ploss.item(),
     )
 
-    # Plot results
-    # plot_results(ys, fs, N, nfilts)
+    print("=====================================")
 
-    # fft_recon = recon_fft_from_bark(ys_original.squeeze(0), fs=fs)
-
-    # n_samples = audio_original.shape[0]
-    # t = torch.linspace(0, n_samples / fs, n_samples)
-    # freq = 440
-    # sine_wave = torch.sin(2 * torch.pi * freq * t)
-    # sine_wave = (
-    #     2 * (sine_wave - sine_wave.min()) / (sine_wave.max() - sine_wave.min()) - 1
-    # )
-    # ys_original = compute_STFT(sine_wave, N=1024).unsqueeze(0).unsqueeze(0)
-    # print("ys_original", ys_original.max())  # 1.4517
-    # print("sinewave", sine_wave.min())
-    # raise ValueError("stop")
-
-    stft_recon_quant = recon_stft_from_bark_and_quantize(
-        ys_original.squeeze(0), fs=fs, nfilts=nfilts, mT_dB_shift=mT_dB_shift
+    # SAL
+    mp3_ploss = psycho_acoustic_loss(
+        ys_mp3_align,
+        ys_original,
+        fs=sample_rate,
+        N=1024,
+        nfilts=64,
+        method="SAL",
+        use_LTQ=False,
     )
-    # waveform_recon = reconstruct_waveform(audio_original, fft_recon)
+    print("SAL loss: mp3, original", mp3_ploss.item())
 
-    waveform_recon_quant = reconstruct_waveform(audio_original, stft_recon_quant)
-    # print("waveform_recon", waveform_recon.shape)
-    print("waveform_original", audio_original.shape)
-    print("waveform_recon_quant", waveform_recon_quant.shape)
-
-    plt.figure(figsize=(12, 8))
-    plt.subplot(2, 1, 1)
-    plt.plot(audio_original.numpy())
-    plt.title("Original Audio")
-    plt.xlabel("Sample")
-    plt.ylabel("Amplitude")
-
-    plt.subplot(2, 1, 2)
-    plt.plot(waveform_recon_quant.numpy())
-    plt.title(f"Reconstructed Audio at mT_dB_shift={mT_dB_shift} dB")
-    plt.xlabel("Sample")
-    plt.ylabel("Amplitude")
-
-    plt.tight_layout()
-    # plt.show()
-
-    torchaudio.save(
-        "audio_mp3_align_recon_" + str(mT_dB_shift) + ".wav",
-        waveform_recon_quant.unsqueeze(0),
-        sample_rate,
+    quant_ploss = psycho_acoustic_loss(
+        ys_quantized,
+        ys_original,
+        fs=sample_rate,
+        N=1024,
+        nfilts=64,
+        method="SAL",
+        use_LTQ=False,
     )
+    print("SAL: quantized, original", quant_ploss.item())
+    print(
+        "SAL: mp3/quant ratio, small is better",
+        mp3_ploss.item() / quant_ploss.item(),
+    )
+
+    print("=====================================")
+
+    # SAL_softplus
+    mp3_ploss = psycho_acoustic_loss(
+        ys_mp3_align,
+        ys_original,
+        fs=sample_rate,
+        N=1024,
+        nfilts=64,
+        method="SAL_softplus",
+        use_LTQ=False,
+    )
+    print("SAL_softplus loss: mp3, original", mp3_ploss.item())
+
+    quant_ploss = psycho_acoustic_loss(
+        ys_quantized,
+        ys_original,
+        fs=sample_rate,
+        N=1024,
+        nfilts=64,
+        method="SAL_softplus",
+        use_LTQ=False,
+    )
+    print("SAL_softplus: quantized, original", quant_ploss.item())
+    print(
+        "SAL_softplus: mp3/quant ratio, small is better",
+        mp3_ploss.item() / quant_ploss.item(),
+    )
+
+    print("=====================================")
+
+    varify = False
+    if varify:
+        stft_recon_quant = recon_stft_from_bark_and_quantize(
+            ys_original.squeeze(0), fs=fs, nfilts=nfilts, mT_dB_shift=mT_dB_shift
+        )
+        # waveform_recon = reconstruct_waveform(audio_original, fft_recon)
+
+        waveform_recon_quant = reconstruct_waveform(audio_original, stft_recon_quant)
+
+        plt.figure(figsize=(12, 8))
+        plt.subplot(2, 1, 1)
+        plt.plot(audio_original.numpy())
+        plt.title("Original Audio")
+        plt.xlabel("Sample")
+        plt.ylabel("Amplitude")
+
+        plt.subplot(2, 1, 2)
+        plt.plot(waveform_recon_quant.numpy())
+        plt.title(f"Reconstructed Audio at mT_dB_shift={mT_dB_shift} dB")
+        plt.xlabel("Sample")
+        plt.ylabel("Amplitude")
+
+        plt.tight_layout()
+        plt.show()
+
+        torchaudio.save(
+            "audio_mp3_align_recon_" + str(mT_dB_shift) + ".wav",
+            waveform_recon_quant.unsqueeze(0),
+            sample_rate,
+        )
 
 
 def test(folder_path):
