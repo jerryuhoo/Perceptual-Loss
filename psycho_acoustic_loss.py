@@ -40,7 +40,12 @@ def psycho_acoustic_loss(
         mT_true = compute_masking_threshold(
             ys_true, fs, N, nfilts, use_LTQ=use_LTQ, ref_dB=ref_dB
         )
-        if method == "MTWSD" or method == "MTWSD_scaled" or method == "SMR_weighted":
+        if (
+            method == "MTWSD"
+            or method == "MTWSD_scaled"
+            or method == "SMR_weighted"
+            or method == "LTQ_weighted"
+        ):
             # expand mT_true from [batch_size, frames, nfilts] to [batch_size, 1, N+1, frames]
             mT_true = mT_true.unsqueeze(1)
             W = mapping2barkmat(fs, nfilts, 2 * N).to(ys_pred.device)
@@ -67,6 +72,23 @@ def psycho_acoustic_loss(
                     mT_true == 0, torch.full_like(mT_true, epsilon), mT_true
                 )
                 mt_weight = torch.clamp(ys_true / mT_true_safe, max=10)
+            elif method == "LTQ_weighted":
+                f = torch.linspace(0, fs // 2, N + 1)
+                inverted_LTQ_dB = -(
+                    3.64 * (f / 1000.0) ** -0.8
+                    - 6.5 * torch.exp(-0.6 * (f / 1000.0 - 3.3) ** 2.0)
+                    + 1e-3 * ((f / 1000.0) ** 4.0)
+                )
+                inverted_LTQ_dB = torch.clip(inverted_LTQ_dB, -120, 20)
+
+                # Convert the inverted LTQ dB to magnitude scale
+                inverted_LTQ_magnitude = 10.0 ** (inverted_LTQ_dB / 20)
+                frame_length = ys_true.shape[-1]
+                # Repeat the inverted LTQ magnitude to match the frame length
+                inverted_LTQ_magnitude = (
+                    inverted_LTQ_magnitude.unsqueeze(0).unsqueeze(0).unsqueeze(-1)
+                )
+                mt_weight = inverted_LTQ_magnitude.repeat(1, 1, 1, frame_length)
             if plot:
                 plt.figure(figsize=(10, 8))
 
@@ -89,7 +111,8 @@ def psycho_acoustic_loss(
                 plt.xlabel("Frequency Bins")
                 plt.ylabel("Magnitude")
                 plt.title("Masking Thresholds")
-                plt.xlim(0, 100)
+                # plt.xlim(0, 100)
+                # plt.ylim(0, 2)
                 plt.legend()
 
                 # Subplot 2: Masking Threshold Weight
@@ -104,7 +127,7 @@ def psycho_acoustic_loss(
                 plt.xlabel("Frequency Bins")
                 plt.ylabel("Magnitude")
                 plt.title("Masking Threshold Weight")
-                plt.xlim(0, 100)
+                # plt.xlim(0, 100)
                 plt.legend()
                 plt.suptitle(f"Method: {method}")
                 plt.tight_layout(rect=[0, 0, 1, 0.95])
