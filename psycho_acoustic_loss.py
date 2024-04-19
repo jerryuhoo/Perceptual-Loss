@@ -92,7 +92,11 @@ def psycho_acoustic_loss(
                     plt.title("Masking Threshold Weight")
                     plt.show()
             elif method == "SMR_weighted":
-                mt_weight = torch.clamp(ys_true / mT_true, max=10)
+                epsilon = 1e-8
+                mT_true_safe = torch.where(
+                    mT_true == 0, torch.full_like(mT_true, epsilon), mT_true
+                )
+                mt_weight = torch.clamp(ys_true / mT_true_safe, max=10)
                 if plot:
                     plt.figure(figsize=(10, 8))
 
