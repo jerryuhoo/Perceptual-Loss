@@ -73,7 +73,7 @@ def psycho_acoustic_loss(
                 )
                 mt_weight = torch.clamp(ys_true / mT_true_safe, max=10)
             elif method == "LTQ_weighted":
-                f = torch.linspace(0, fs // 2, N + 1)
+                f = torch.linspace(0, fs // 2, N + 1).to(ys_true.device)
                 inverted_LTQ_dB = -(
                     3.64 * (f / 1000.0) ** -0.8
                     - 6.5 * torch.exp(-0.6 * (f / 1000.0 - 3.3) ** 2.0)
