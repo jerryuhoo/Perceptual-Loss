@@ -94,8 +94,10 @@ def psycho_acoustic_loss(
             elif method == "SMR_weighted":
                 mt_weight = ys_true / mT_true
                 if plot:
-                    plt.figure(figsize=(10, 6))
-                    plot_value = mt_weight[0, 0, :, 100].cpu().numpy()
+                    plt.figure(figsize=(10, 8))
+
+                    # Subplot 1: Masking Thresholds
+                    plt.subplot(2, 1, 1)
                     plt.plot(
                         ys_true[0, 0, :, 100].cpu().numpy(),
                         label="Spectrum",
@@ -113,18 +115,24 @@ def psycho_acoustic_loss(
                     plt.xlabel("Frequency Bins")
                     plt.ylabel("Magnitude")
                     plt.title("Masking Thresholds")
+                    plt.xlim(0, 100)
                     plt.legend()
-                    plt.show()
 
+                    # Subplot 2: Masking Threshold Weight
+                    plt.subplot(2, 1, 2)
+                    plot_value = mt_weight[0, 0, :, 100].cpu().numpy()
                     plt.plot(
                         plot_value,
                         label="Masking Threshold Weight",
                         color="red",
+                        linewidth=0.5,
                     )
                     plt.xlabel("Frequency Bins")
                     plt.ylabel("Magnitude")
                     plt.title("Masking Threshold Weight")
+                    plt.xlim(0, 100)
                     plt.legend()
+                    plt.tight_layout()
                     plt.show()
 
             normdiffspec = abs(ys_pred - ys_true) * (1 - alpha + alpha * mt_weight)
