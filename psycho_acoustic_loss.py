@@ -597,7 +597,7 @@ def plot_results(ys, fs, N, nfilts=64):
     plt.figure(figsize=(12, 8))
 
     # Plot Spectrogram
-    plt.subplot(3, 1, 1)
+    plt.subplot(4, 1, 1)
     plt.pcolormesh(t, f, ys_dB.numpy(), shading="gouraud")
     plt.colorbar(label="dB")
     plt.title("Spectrogram")
@@ -606,7 +606,7 @@ def plot_results(ys, fs, N, nfilts=64):
     # Plot Spectrum and Masking Threshold of Middle Frame
     middle_frame_idx = len(t) // 2
     print("middle_frame_idx", middle_frame_idx)
-    plt.subplot(3, 1, 2)
+    plt.subplot(4, 1, 2)
 
     plt.plot(
         f, ys_dB[:, middle_frame_idx].numpy(), color="blue", label="Spectrum", alpha=0.7
@@ -634,16 +634,31 @@ def plot_results(ys, fs, N, nfilts=64):
     # Plot Spreading Function
     spreadingfunctionBarkdB = f_SP_dB(fs / 2, W.shape[0])
     # print("spreadingfunctionBarkdB", spreadingfunctionBarkdB)
+    plt.subplot(4, 1, 3)
+    plt.plot(spreadingfunctionBarkdB.numpy())
+    x_length = len(spreadingfunctionBarkdB)
+    # plt.axvline(x=x_length // 2, color="red", linestyle="--")
+    # plt.axvline(x=x_length - 1, color="red", linestyle="--")
+    plt.axvline(x=nfilts, color="red", linestyle="--", label="Boundary at nfilts")
+    plt.title("Spreading Function")
+    plt.xlabel("Bark Scale")
+    plt.ylabel("Amplitude (dB)")
+    plt.legend()
+    plt.grid(True)
+
     spreadingfunctionBarkVoltage = 10.0 ** (spreadingfunctionBarkdB / 20.0 * alpha)
 
-    plt.subplot(3, 1, 3)
+    plt.subplot(4, 1, 4)
     plt.plot(spreadingfunctionBarkVoltage.numpy())
     x_length = len(spreadingfunctionBarkVoltage)
     # plt.axvline(x=x_length // 2, color="red", linestyle="--")
     # plt.axvline(x=x_length - 1, color="red", linestyle="--")
+    plt.axvline(x=nfilts, color="red", linestyle="--", label="Boundary at nfilts")
     plt.title("Spreading Function")
     plt.xlabel("Bark Scale")
     plt.ylabel("Amplitude (Voltage)")
+    plt.legend()
+    plt.grid(True)
 
     plt.tight_layout()
     plt.show()

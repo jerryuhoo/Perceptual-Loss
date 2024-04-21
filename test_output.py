@@ -58,18 +58,18 @@ def main():
     )
     print("====================================================")
 
-    # single file example with weighting
+    # SMR_weighted
     ploss_good = psycho_acoustic_loss(
         ys_good,
         ys_gt,
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
-        use_weighting=True,
+        method="SMR_weighted",
         use_LTQ=False,
         mT_shift=0.00,
     )
-    print("weighted loss: good, gt", ploss_good.item())
+    print("SMR_weighted loss: good, gt", ploss_good.item())
 
     ploss_bad = psycho_acoustic_loss(
         ys_bad,
@@ -77,25 +77,25 @@ def main():
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
-        use_weighting=True,
+        method="SMR_weighted",
         use_LTQ=False,
         mT_shift=0.00,
     )
-    print("weighted loss: bad, gt", ploss_bad.item())
+    print("SMR_weighted loss: bad, gt", ploss_bad.item())
     print(
-        "weighted loss: good/bad ratio, small is better",
+        "SMR_weighted loss: good/bad ratio, small is better",
         ploss_good.item() / ploss_bad.item(),
     )
     print("====================================================")
 
-    # single file example without weighting
+    # MTD
     ploss_good = psycho_acoustic_loss(
         ys_good,
         ys_gt,
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
-        use_weighting=False,
+        method="MTD",
         use_LTQ=False,
     )
     print("psy loss: good, gt", ploss_good.item())
@@ -106,27 +106,27 @@ def main():
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
-        use_weighting=False,
+        method="MTD",
         use_LTQ=False,
     )
-    print("psy loss: bad, gt", ploss_bad.item())
+    print("MTD: bad, gt", ploss_bad.item())
     print(
-        "psy loss: good/bad ratio, small is better",
+        "MTD: good/bad ratio, small is better",
         ploss_good.item() / ploss_bad.item(),
     )
     print("====================================================")
 
-    # single file example with weighting and LTQ
+    # MTWSD_scaled
     ploss_good = psycho_acoustic_loss(
         ys_good,
         ys_gt,
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
-        use_weighting=True,
-        use_LTQ=True,
+        method="MTWSD_scaled",
+        use_LTQ=False,
     )
-    print("weighted loss + LTQ: good, gt", ploss_good.item())
+    print("MTWSD_scaled: good, gt", ploss_good.item())
 
     ploss_bad = psycho_acoustic_loss(
         ys_bad,
@@ -134,27 +134,27 @@ def main():
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
-        use_weighting=True,
-        use_LTQ=True,
+        method="MTWSD_scaled",
+        use_LTQ=False,
     )
-    print("weighted loss + LTQ: bad, gt", ploss_bad.item())
+    print("MTWSD_scaled: bad, gt", ploss_bad.item())
     print(
-        "weighted loss + LTQ: good/bad ratio, small is better",
+        "MTWSD_scaled: good/bad ratio, small is better",
         ploss_good.item() / ploss_bad.item(),
     )
     print("====================================================")
 
-    # single file example without weighting and with LTQ
+    # MTWSD + LTQ
     ploss_good = psycho_acoustic_loss(
         ys_good,
         ys_gt,
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
-        use_weighting=False,
+        method="MTWSD",
         use_LTQ=True,
     )
-    print("psy loss + LTQ: good, gt", ploss_good.item())
+    print("MTWSD + LTQ: good, gt", ploss_good.item())
 
     ploss_bad = psycho_acoustic_loss(
         ys_bad,
@@ -162,29 +162,29 @@ def main():
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
-        use_weighting=False,
+        method="MTWSD",
         use_LTQ=True,
     )
-    print("psy loss + LTQ: bad, gt", ploss_bad.item())
+    print("MTWSD + LTQ: bad, gt", ploss_bad.item())
     print(
-        "psy loss + LTQ: good/bad ratio, small is better",
+        "MTWSD + LTQ: good/bad ratio, small is better",
         ploss_good.item() / ploss_bad.item(),
     )
     print("====================================================")
 
-    # single file example with weighting and with LTQ, with mT_dB_shift
+    # LTQ_weighted
     ploss_good = psycho_acoustic_loss(
         ys_good,
         ys_gt,
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
-        use_weighting=True,
+        method="LTQ_weighted",
         use_LTQ=True,
-        mT_shift=mT_dB_shift,
+        mT_shift=0.0,
         use_dB=False,
     )
-    print(f"weighted loss + LTQ + shift {mT_dB_shift}: good, gt", ploss_good.item())
+    print(f"LTQ_weighted: good, gt", ploss_good.item())
 
     ploss_bad = psycho_acoustic_loss(
         ys_bad,
@@ -192,33 +192,31 @@ def main():
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
-        use_weighting=True,
+        method="LTQ_weighted",
         use_LTQ=True,
-        mT_shift=mT_dB_shift,
+        mT_shift=0.0,
         use_dB=False,
     )
-    print(f"weighted loss + LTQ + shift {mT_dB_shift}: bad, gt", ploss_bad.item())
+    print(f"LTQ_weighted: bad, gt", ploss_bad.item())
     print(
-        f"weighted loss + LTQ + shift {mT_dB_shift}: good/bad ratio, small is better",
+        f"LTQ_weighted: good/bad ratio, small is better",
         ploss_good.item() / ploss_bad.item(),
     )
     print("====================================================")
 
-    # single file example with weighting and with LTQ, with mT_dB_shift, with dB scale
+    # SAL
     ploss_good = psycho_acoustic_loss(
         ys_good,
         ys_gt,
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
-        use_weighting=True,
-        use_LTQ=True,
-        mT_shift=mT_dB_shift,
-        use_dB=True,
+        method="SAL",
+        use_LTQ=False,
+        mT_shift=0.0,
+        use_dB=False,
     )
-    print(
-        f"weighted loss + LTQ + shift {mT_dB_shift} + dB: good, gt", ploss_good.item()
-    )
+    print(f"LTQ_weighted: good, gt", ploss_good.item())
 
     ploss_bad = psycho_acoustic_loss(
         ys_bad,
@@ -226,31 +224,31 @@ def main():
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
-        use_weighting=True,
-        use_LTQ=True,
-        mT_shift=mT_dB_shift,
-        use_dB=True,
+        method="SAL",
+        use_LTQ=False,
+        mT_shift=0.0,
+        use_dB=False,
     )
-    print(f"weighted loss + LTQ + shift {mT_dB_shift} + dB: bad, gt", ploss_bad.item())
+    print(f"SAL: bad, gt", ploss_bad.item())
     print(
-        f"weighted loss + LTQ + shift {mT_dB_shift} + dB: good/bad ratio, small is better",
+        f"SAL: good/bad ratio, small is better",
         ploss_good.item() / ploss_bad.item(),
     )
     print("====================================================")
 
-    # single file example with weighting and with LTQ, with dB scale
+    # SAL SoftPlus
     ploss_good = psycho_acoustic_loss(
         ys_good,
         ys_gt,
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
-        use_weighting=True,
-        use_LTQ=True,
-        mT_shift=0,
-        use_dB=True,
+        method="SAL_softplus",
+        use_LTQ=False,
+        mT_shift=0.0,
+        use_dB=False,
     )
-    print(f"weighted loss + LTQ + dB: good, gt", ploss_good.item())
+    print(f"SAL_softplus: good, gt", ploss_good.item())
 
     ploss_bad = psycho_acoustic_loss(
         ys_bad,
@@ -258,97 +256,99 @@ def main():
         fs=sample_rate,
         N=N,
         nfilts=nfilts,
-        use_weighting=True,
-        use_LTQ=True,
-        mT_shift=0,
-        use_dB=True,
+        method="SAL_softplus",
+        use_LTQ=False,
+        mT_shift=0.0,
+        use_dB=False,
     )
-    print(f"weighted loss + LTQ + dB: bad, gt", ploss_bad.item())
+    print(f"SAL_softplus: bad, gt", ploss_bad.item())
     print(
-        "weighted loss + LTQ + dB: good/bad ratio, small is better",
+        f"SAL_softplus: good/bad ratio, small is better",
         ploss_good.item() / ploss_bad.item(),
     )
     print("====================================================")
 
-    mse_loss_quiet = F.mse_loss(ys_gt_quiet, ys_gt_rev_quiet)
-    print("ys_gt_quiet", ys_gt_quiet.shape)
-    print("ys_gt_rev_quiet", ys_gt_rev_quiet.shape)
-    print("ys_gt", ys_gt.shape)
-    mse_loss_quiet_gt = F.mse_loss(ys_gt, ys_gt_quiet)
-    print("mse_loss_quiet", mse_loss_quiet.item())
-    print("mse_loss_quiet_gt", mse_loss_quiet_gt.item())
-    print(
-        "mse loss: quiet/gt ratio, small is better",
-        mse_loss_quiet.item() / mse_loss_quiet_gt.item(),
-    )
+    # print("====================================================")
 
-    ploss_quiet = psycho_acoustic_loss(
-        ys_gt_rev_quiet,
-        ys_gt_quiet,
-        fs=sample_rate,
-        N=N,
-        nfilts=nfilts,
-        use_weighting=True,
-        use_LTQ=True,
-        use_dB=False,
-    )
-    ploss_quiet_gt = psycho_acoustic_loss(
-        ys_gt_quiet,
-        ys_gt,
-        fs=sample_rate,
-        N=N,
-        nfilts=nfilts,
-        use_weighting=True,
-        use_LTQ=True,
-        use_dB=False,
-    )
-    print("psy loss: quiet, rev_quiet", ploss_quiet.item())
-    print("psy loss: quiet_gt, gt", ploss_quiet_gt.item())
-    print(
-        "psy loss: quiet/quiet_gt ratio, small is better",
-        ploss_quiet.item() / ploss_quiet_gt.item(),
-    )
+    # mse_loss_quiet = F.mse_loss(ys_gt_quiet, ys_gt_rev_quiet)
+    # print("ys_gt_quiet", ys_gt_quiet.shape)
+    # print("ys_gt_rev_quiet", ys_gt_rev_quiet.shape)
+    # print("ys_gt", ys_gt.shape)
+    # mse_loss_quiet_gt = F.mse_loss(ys_gt, ys_gt_quiet)
+    # print("mse_loss_quiet", mse_loss_quiet.item())
+    # print("mse_loss_quiet_gt", mse_loss_quiet_gt.item())
+    # print(
+    #     "mse loss: quiet/gt ratio, small is better",
+    #     mse_loss_quiet.item() / mse_loss_quiet_gt.item(),
+    # )
 
-    ploss_quiet = psycho_acoustic_loss(
-        ys_gt_rev_quiet,
-        ys_gt_quiet,
-        fs=sample_rate,
-        N=N,
-        nfilts=nfilts,
-        use_weighting=False,
-        use_LTQ=True,
-        use_dB=True,
-    )
-    ploss_quiet_gt = psycho_acoustic_loss(
-        ys_gt_quiet,
-        ys_gt,
-        fs=sample_rate,
-        N=N,
-        nfilts=nfilts,
-        use_weighting=False,
-        use_LTQ=True,
-        use_dB=True,
-    )
-    print("psy loss without LTQ: quiet, rev_quiet", ploss_quiet.item())
-    print("psy loss without LTQ: quiet_gt, gt", ploss_quiet_gt.item())
-    print(
-        "psy loss without LTQ: quiet/quiet_gt ratio, small is better",
-        ploss_quiet.item() / ploss_quiet_gt.item(),
-    )
+    # ploss_quiet = psycho_acoustic_loss(
+    #     ys_gt_rev_quiet,
+    #     ys_gt_quiet,
+    #     fs=sample_rate,
+    #     N=N,
+    #     nfilts=nfilts,
+    #     use_weighting=True,
+    #     use_LTQ=True,
+    #     use_dB=False,
+    # )
+    # ploss_quiet_gt = psycho_acoustic_loss(
+    #     ys_gt_quiet,
+    #     ys_gt,
+    #     fs=sample_rate,
+    #     N=N,
+    #     nfilts=nfilts,
+    #     use_weighting=True,
+    #     use_LTQ=True,
+    #     use_dB=False,
+    # )
+    # print("psy loss: quiet, rev_quiet", ploss_quiet.item())
+    # print("psy loss: quiet_gt, gt", ploss_quiet_gt.item())
+    # print(
+    #     "psy loss: quiet/quiet_gt ratio, small is better",
+    #     ploss_quiet.item() / ploss_quiet_gt.item(),
+    # )
 
-    # only test
-    ys_gt_noise = torch.rand(ys_gt.shape)
-    ys_gt_sin = torch.sin(ys_gt)
-    ploss = psycho_acoustic_loss(
-        ys_gt_rev_quiet,
-        ys_gt_noise,
-        fs=sample_rate,
-        N=N,
-        nfilts=nfilts,
-        use_weighting=True,
-        use_LTQ=True,
-        use_dB=True,
-    )
+    # ploss_quiet = psycho_acoustic_loss(
+    #     ys_gt_rev_quiet,
+    #     ys_gt_quiet,
+    #     fs=sample_rate,
+    #     N=N,
+    #     nfilts=nfilts,
+    #     use_weighting=False,
+    #     use_LTQ=True,
+    #     use_dB=True,
+    # )
+    # ploss_quiet_gt = psycho_acoustic_loss(
+    #     ys_gt_quiet,
+    #     ys_gt,
+    #     fs=sample_rate,
+    #     N=N,
+    #     nfilts=nfilts,
+    #     use_weighting=False,
+    #     use_LTQ=True,
+    #     use_dB=True,
+    # )
+    # print("psy loss without LTQ: quiet, rev_quiet", ploss_quiet.item())
+    # print("psy loss without LTQ: quiet_gt, gt", ploss_quiet_gt.item())
+    # print(
+    #     "psy loss without LTQ: quiet/quiet_gt ratio, small is better",
+    #     ploss_quiet.item() / ploss_quiet_gt.item(),
+    # )
+
+    # # only test
+    # ys_gt_noise = torch.rand(ys_gt.shape)
+    # ys_gt_sin = torch.sin(ys_gt)
+    # ploss = psycho_acoustic_loss(
+    #     ys_gt_rev_quiet,
+    #     ys_gt_noise,
+    #     fs=sample_rate,
+    #     N=N,
+    #     nfilts=nfilts,
+    #     use_weighting=True,
+    #     use_LTQ=True,
+    #     use_dB=True,
+    # )
 
 
 if __name__ == "__main__":
