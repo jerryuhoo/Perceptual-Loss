@@ -33,6 +33,7 @@ def psycho_acoustic_loss(
 
     # Function to compute MSE loss for a single channel
     def compute_channel_loss(ys_pred, ys_true):
+        epsilon = 1e-8
         plot = False
         # method = (
         #     "MTD"  # MTD or MTWSD or MTWSD_scaled or SMR_weighted or SAL or SAL_softplus
@@ -58,7 +59,10 @@ def psycho_acoustic_loss(
                 mT_true = mT_true + mT_shift
 
             if method == "MTWSD":
-                mt_weight = 1 / mT_true
+                mT_true_safe = torch.where(
+                    mT_true == 0, torch.full_like(mT_true, epsilon), mT_true
+                )
+                mt_weight = torch.clamp(1 / mT_true_safe, max=2)
             elif method == "MTWSD_scaled":
                 if use_dB:
                     max_value = 1
@@ -67,11 +71,10 @@ def psycho_acoustic_loss(
                 mt_weight = max_value - mT_true
                 mt_weight = torch.clamp(mt_weight, min=0.1) / max_value
             elif method == "SMR_weighted":
-                epsilon = 1e-8
                 mT_true_safe = torch.where(
                     mT_true == 0, torch.full_like(mT_true, epsilon), mT_true
                 )
-                mt_weight = torch.clamp(ys_true / mT_true_safe, max=10)
+                mt_weight = torch.clamp(ys_true / mT_true_safe, max=2)
             elif method == "LTQ_weighted":
                 f = torch.linspace(0, fs // 2, N + 1).to(ys_true.device)
                 inverted_LTQ_dB = -(
