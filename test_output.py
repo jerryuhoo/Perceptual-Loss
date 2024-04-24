@@ -153,6 +153,7 @@ def main():
         nfilts=nfilts,
         method="MTWSD",
         use_LTQ=True,
+        use_dB=False,
     )
     print("MTWSD + LTQ: good, gt", ploss_good.item())
 
@@ -164,6 +165,7 @@ def main():
         nfilts=nfilts,
         method="MTWSD",
         use_LTQ=True,
+        use_dB=False,
     )
     print("MTWSD + LTQ: bad, gt", ploss_bad.item())
     print(
@@ -212,11 +214,11 @@ def main():
         N=N,
         nfilts=nfilts,
         method="SAL",
-        use_LTQ=False,
+        use_LTQ=True,
         mT_shift=0.0,
-        use_dB=False,
+        use_dB=True,
     )
-    print(f"LTQ_weighted: good, gt", ploss_good.item())
+    print(f"SAL: good, gt", ploss_good.item())
 
     ploss_bad = psycho_acoustic_loss(
         ys_bad,
@@ -225,9 +227,9 @@ def main():
         N=N,
         nfilts=nfilts,
         method="SAL",
-        use_LTQ=False,
+        use_LTQ=True,
         mT_shift=0.0,
-        use_dB=False,
+        use_dB=True,
     )
     print(f"SAL: bad, gt", ploss_bad.item())
     print(
