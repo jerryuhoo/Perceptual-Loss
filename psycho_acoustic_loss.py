@@ -53,16 +53,19 @@ def psycho_acoustic_loss(
             W_inv = mappingfrombarkmat(W, 2 * N).to(ys_pred.device)
             mT_true = mappingfrombark(mT_true, W_inv, 2 * N).transpose(-1, -2)
 
-            if use_dB:
-                mT_true = torch.log10(mT_true + mT_shift + 1 + 1e-6)
-            else:
+            if not use_dB:
                 mT_true = mT_true + mT_shift
 
             if method == "MTWSD":
                 mT_true_safe = torch.where(
                     mT_true == 0, torch.full_like(mT_true, epsilon), mT_true
                 )
-                mt_weight = torch.clamp(1 / mT_true_safe, max=2)
+                if not use_dB:
+                    mt_weight = torch.clamp(1 / mT_true_safe, max=2)
+                else:
+                    normdiffspec = torch.log10(
+                        1 + abs(ys_pred - ys_true) / mT_true_safe
+                    )
             elif method == "MTWSD_scaled":
                 if use_dB:
                     max_value = 1
@@ -136,7 +139,9 @@ def psycho_acoustic_loss(
                 plt.tight_layout(rect=[0, 0, 1, 0.95])
                 plt.show()
 
-            normdiffspec = abs(ys_pred - ys_true) * (1 - alpha + alpha * mt_weight)
+            if not use_dB:
+                normdiffspec = abs(ys_pred - ys_true) * (1 - alpha + alpha * mt_weight)
+
             normdiffspec_squared = normdiffspec**2
             loss = torch.mean(normdiffspec_squared)
         elif method == "MTD":
@@ -145,6 +150,10 @@ def psycho_acoustic_loss(
             )
             loss = F.mse_loss(mT_pred, mT_true)
         elif method == "SAL" or method == "SAL_softplus":
+            if use_dB:
+                mT_true = 20 * torch.log10(mT_true + mT_shift + 1)
+                ys_true = 20 * torch.log10(ys_true + 1)
+                ys_pred = 20 * torch.log10(ys_pred + 1)
             mT_true = mT_true.unsqueeze(1)
             W = mapping2barkmat(fs, nfilts, 2 * N).to(ys_pred.device)
             W_inv = mappingfrombarkmat(W, 2 * N).to(ys_pred.device)
